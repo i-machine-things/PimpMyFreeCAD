@@ -277,18 +277,26 @@ class BodySweepCut:
         body = obj.getParentGeoFeatureGroup()
         if body is not None:                               # zarf dunya koordinatinda: Body'nin kendi koordinatina
             swept.transformShape(body.getGlobalPlacement().inverse().toMatrix())
+        # dogrudan kesme: rp._combine'in hacim denetimi burada kullanilmaz, cunku hizli yontemin yogun B-spline
+        # katisinda OCC Volume %5'e kadar yanlis cikiyor ve dogru kesimi reddediyordu (3d-sweep-box: 2.4 s, None)
         res = None
-        for fuzzy in (1e-3, 0.01, 0.0):
+        for fuzzy in (0.0, 1e-3, 0.01):
             try:
-                res = rp._combine(base, swept, True, bool(obj.Refine), fuzzy)
+                r = base.copy().cut(swept.copy(), fuzzy) if fuzzy else base.copy().cut(swept.copy())
+                if obj.Refine:
+                    try:
+                        r = r.removeSplitter()
+                    except Exception:
+                        pass
             except Exception:
-                res = None
-            if res is not None:
+                continue
+            if r.isValid() and r.Solids:
+                res = r.Solids[0] if len(r.Solids) == 1 else r
                 break
         if res is None:
             raise RuntimeError(T("Body Sweep: the cut from the Body failed"))
         obj.AddSubShape = swept
-        obj.Shape = res[0]
+        obj.Shape = res
 
     def dumps(self):
         return None
@@ -322,6 +330,13 @@ class ViewProviderBodySweepCut:
 
 
 # --- hedefler ---
+def _display(obj):
+    """Ekran ucgenlemesi orta incelikte: hizli yontemin yogun B-spline yuzeyi 0.05 mm sapmayla cizilirken FreeCAD
+    dakikalarca donuyordu (3d-sweep-box, 128 x 330 kontrol noktasi)."""
+    obj.ViewObject.Deviation = 0.2
+    obj.ViewObject.AngularDeflection = 12.0
+
+
 def body_of(o):
     """Nesnenin PartDesign Body'si (Body'nin kendisi de olabilir) ya da None."""
     if o is None:
@@ -380,7 +395,7 @@ def sync_targets(sweep):
             c.Sweep = sweep
             if App.GuiUp:
                 ViewProviderBodySweepCut(c.ViewObject)
-                rp._fine_display(c)
+                _display(c)
         else:
             c = doc.addObject("Part::Cut", "BodySweepCut")
             c.Base, c.Tool = t, sweep
@@ -401,7 +416,8 @@ def make(doc, tool=None, path=None, targets=None):
         obj.Targets = targets
     if App.GuiUp:
         ViewProviderBodySweep(obj.ViewObject)
-        rp._fine_display(obj)
+        _display(obj)
+        obj.ViewObject.Visibility = not targets            # kesilecek govde varsa zarf gizli
     return obj
 
 

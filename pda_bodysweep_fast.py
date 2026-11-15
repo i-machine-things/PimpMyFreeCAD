@@ -150,42 +150,74 @@ def _outer_ring(polys, p, u, v, rmax, n=N_RAYS):
     return p + ring[:, :1] * u + ring[:, 1:] * v
 
 
-def _loft(G, Vv, n=N_RAYS):
-    """Halkalar -> kati. u: periyodik kubik interpolasyon; v: veri noktalari kontrol noktasi (Greville kesitlerde)."""
+_ubasis = {}
+
+
+def _periodic_basis(nu, n):
+    """Periyodik kubik B-spline (dugumler k/nu, katlik 1) tabani n esit aralikli noktada: (n, nu). OCCT'nin kendi
+    egrisinden okunur (kutup siralamasi OCCT ile ayni olsun diye)."""
+    key = (nu, n)
+    if key not in _ubasis:
+        B = np.zeros((n, nu))
+        us = np.arange(n) / float(n)
+        for j in range(nu):
+            c = Part.BSplineCurve()
+            c.buildFromPolesMultsKnots([App.Vector(1.0 if k == j else 0.0, 0, 0) for k in range(nu)], [1] * (nu + 1),
+                                       [k / float(nu) for k in range(nu + 1)], True, 3)
+            B[:, j] = [c.value(float(u)).x for u in us]
+        _ubasis[key] = B
+    return _ubasis[key]
+
+
+def _vbasis(vp, mv):
+    """Kenetli kubik taban (M, mv); ic dugumler kesitlerin sira esit dagilimina gore (sik kesitli uclarda sik dugum)."""
+    from scipy.interpolate import BSpline
+    inner = np.quantile(vp, np.linspace(0, 1, mv - 2)[1:-1]) if mv > 4 else np.array([])
+    t = np.r_[[0.0] * 4, inner, [1.0] * 4]
+    return BSpline.design_matrix(np.clip(vp, 0, 1 - 1e-12), t, 3).toarray(), t
+
+
+def _loft(G, Vv, n=N_RAYS, tol=0.1):
+    """Halkalar -> kati. u (kesit) yonunde derece 1: yuzey halka noktalarindan tam gecer, kose tasmasi yok (128 nokta
+    30 mm yaricapta 0.01 mm kiris hatasi). v (yol) yonunde kubik en kucuk kareler: kontrol noktasi sayisi sapma
+    tol'un altina inene dek artar. Ekranda ucgen sayisi aralik (span) sayisiyla buyudugu icin yuzey seyrek tutulur
+    (128 x 330 kubik yuzey: 0.2 mm'de 3 milyon ucgen, 170 s)."""
     M = len(G)
     if M < 4:
         raise ValueError("too few sections")
-    A = np.zeros((n, n))
-    i = np.arange(n)
-    A[i, i] = 4 / 6.
-    A[i, (i - 1) % n] = 1 / 6.
-    A[i, (i + 1) % n] = 1 / 6.
-    Pu = np.einsum("ij,mja->mia", np.linalg.inv(A), G)
     vp = (Vv - Vv[0]) / (Vv[-1] - Vv[0])
-    inner = np.convolve(vp, [1 / 3., 1 / 3., 1 / 3.], "valid")[1:-1]
-    kv = np.r_[0.0, inner, 1.0]
-    km = [4] + [1] * len(inner) + [4]
+    best = None
+    for mv in (M // 3, M // 2, (3 * M) // 4, M):
+        mv = max(4, min(mv, M))
+        Bv, t = _vbasis(vp, mv)
+        P = np.linalg.lstsq(Bv, G.reshape(M, -1), rcond=None)[0].reshape(mv, n, 3)
+        err = np.linalg.norm(np.einsum("mv,vua->mua", Bv, P) - G, axis=2).max()
+        best = (P, t, mv, err)
+        if err <= tol:
+            break
+    P, t, mv, err = best
+    kv, km = np.unique(np.round(t, 12), return_counts=True)
     srf = Part.BSplineSurface()
-    srf.buildFromPolesMultsKnots([[App.Vector(*Pu[j, (k + 1) % n]) for j in range(M)] for k in range(n)],
-                                 [1] * (n + 1), km, [k / float(n) for k in range(n + 1)], kv.tolist(),
-                                 True, False, 3, 3)
+    srf.buildFromPolesMultsKnots([[App.Vector(*P[j, k]) for j in range(mv)] for k in range(n)],
+                                 [1] * (n + 1), km.tolist(), [k / float(n) for k in range(n + 1)], kv.tolist(),
+                                 True, False, 1, 3)
 
     def cap(vv):
         w = Part.Wire(srf.vIso(vv).toShape())
-        P = np.array([tuple(p) for p in w.discretize(97)[:96]])
-        c = P.mean(0)
-        nn = np.linalg.svd(P - c)[2][2]
+        P_ = np.array([tuple(p) for p in w.discretize(97)[:96]])
+        c = P_.mean(0)
+        nn = np.linalg.svd(P_ - c)[2][2]
         return Part.Face(Part.Plane(App.Vector(*c), App.Vector(*nn)), w)
     sh = Part.Shell([srf.toShape(), cap(0.0), cap(1.0)])
     sh.sewShape()
     sol = Part.Solid(sh)
     if sol.Volume < 0:
         sol.reverse()
-    return sol
+    return sol, (n, mv, err)
 
 
 def run(tool, edges, support=None, orient="path", twist_deg=0.0, sec_tol=0.02, fit_tol=0.02, progress=None,
-        cancel=None, ds_mid=5.0, max_disp=0.5, **kw):
+        cancel=None, ds_mid=10.0, max_disp=0.5, **kw):
     """Hizli supurme: kati ya da hata metni. tool: kati (dunya koordinatinda), edges: yol kenarlari."""
     import Mesh
     import MeshPart
@@ -242,8 +274,11 @@ def run(tool, edges, support=None, orient="path", twist_deg=0.0, sec_tol=0.02, f
                 G.append(ring)
                 Vv.append(sv)
         step("hizli yontem: kati kuruluyor (%d kesit)" % len(G))
-        sol = _loft(np.array(G), np.array(Vv))
-        step("hizli yontem bitti: gecerli %s" % sol.isValid())
+        import builtins
+        builtins._bsfastdata = (np.array(G), np.array(Vv))      # inceleme icin
+        sol, (nu, mv, err) = _loft(np.array(G), np.array(Vv), tol=max(0.1, fit_tol))
+        step("hizli yontem bitti: gecerli %s, yuzey %d x %d kontrol noktasi, halkalara en buyuk sapma %.3f mm"
+             % (sol.isValid(), nu, mv, err))
         return sol
     except Cancelled:
         return "cancelled"
