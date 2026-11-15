@@ -199,6 +199,18 @@ TR = {
         'Sihirli Loft: iki profil üst üste',
     'Magic Loft: the profiles are on top of each other':
         'Sihirli Loft: profiller üst üste',
+    'Magic Loft: all profiles must have the same number of holes':
+        'Sihirli Loft: bütün profillerde delik sayısı eşit olmalı',
+    'Magic Loft: the hole profile could not be read':
+        'Sihirli Loft: delik profili okunamadı',
+    'Undo':
+        'Geri al',
+    'Redo':
+        'Yinele',
+    'Undo the last edit in this panel (Ctrl+Z)':
+        'Bu paneldeki son düzenlemeyi geri al (Ctrl+Z)',
+    'Redo (Ctrl+Shift+Z or Ctrl+Y)':
+        'Yinele (Ctrl+Shift+Z ya da Ctrl+Y)',
     'Magic Loft: Tangent needs a solid face next to profile %d':
         'Sihirli Loft: Yüzeye teğet için profil %d yanında bir katı yüzü gerekir',
     'Magic Loft: a guide must be an open curve (%s)':
