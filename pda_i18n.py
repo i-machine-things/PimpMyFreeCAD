@@ -301,6 +301,18 @@ TR = {
         'Kesin',
     'Fast: copies of the tool, plane sections and their outer boundary (seconds; sharp edges of the tool are slightly rounded, ~0.5 mm). Exact: exact sections and corner tracks (convex tools, minutes)':
         'Hızlı: aletin kopyaları, düzlem kesitleri ve dış sınırları (saniyeler; aletin keskin kenarları hafif yuvarlanır, ~0,5 mm). Kesin: kesin kesitler ve köşe izleri (dışbükey aletler, dakikalar)',
+    'Offset':
+        'Boşluk',
+    'Round':
+        'Yuvarlak',
+    'Sharp':
+        'Keskin',
+    'Clearance: the swept volume grows by this much on every side (e.g. a channel wider than the part that runs through it); negative shrinks it':
+        'Boşluk: süpürülen hacim her yönde bu kadar büyür (örneğin içinden parça geçecek kanal parçadan geniş olur); eksi değer küçültür',
+    'Round: edges and corners of the clearance are rounded (exact distance everywhere). Sharp: the faces are moved and intersected (sharp corners)':
+        'Yuvarlak: boşluğun kenar ve köşeleri yuvarlanır (her yerde tam aynı uzaklık). Keskin: yüzler kaydırılıp kesiştirilir (köşeler sivri)',
+    'Body Sweep: the tool could not be offset by %.3f mm':
+        'Gövde Süpürme: alete %.3f mm boşluk verilemedi',
     'Undo':
         'Geri al',
     'Redo':

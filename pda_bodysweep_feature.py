@@ -35,7 +35,22 @@ def tool_shape(obj):
         return "Body Sweep: the tool has no solid"
     if len(sh.Solids) != 1:
         return "Body Sweep: the tool must be one solid"
-    return sh.Solids[0]
+    sol = sh.Solids[0]
+    off = float(getattr(obj, "Offset", 0.0))
+    if abs(off) > 1e-9:
+        # bosluk: aletin ofseti supurulur. Supurmenin ofseti, ofsetin supurmesidir (alet her yonde off kadar buyur):
+        # kanal aletten off kadar genis, kesin. Yuvarlak: kenar / koseler off yaricapla (gercek esit uzaklik);
+        # keskin: yuzler kaydirilip kesistirilir (koseler sivri kalir, koselerde bosluk off'tan biraz fazla)
+        join = 0 if getattr(obj, "OffsetJoin", "Round") == "Round" else 2
+        try:
+            o2 = sol.makeOffsetShape(off, 1e-4 * max(sol.BoundBox.DiagonalLength, 1.0), join=join, fill=False)
+            o2 = o2.Solids[0] if o2.Solids else Part.Solid(Part.Shell(o2.Faces))
+        except Exception:
+            o2 = None
+        if o2 is None or o2.isNull() or not o2.isValid() or o2.Volume <= 0:
+            return T("Body Sweep: the tool could not be offset by %.3f mm") % off
+        sol = o2
+    return sol
 
 
 def path_edges(obj):
@@ -79,6 +94,14 @@ def method_prop(obj):
                         "minutes)")
         obj.Method = METHODS
         obj.Method = "Exact"
+    if "Offset" not in obj.PropertiesList:
+        obj.addProperty("App::PropertyDistance", "Offset", "Body Sweep",
+                        "Clearance: the swept volume grows by this much on every side (e.g. a channel wider than the "
+                        "part that runs through it); negative shrinks it")
+        obj.addProperty("App::PropertyEnumeration", "OffsetJoin", "Body Sweep",
+                        "Round: edges and corners of the clearance are rounded (exact distance everywhere). Sharp: the "
+                        "faces are moved and intersected (sharp corners)")
+        obj.OffsetJoin = ["Round", "Sharp"]
 
 
 def params(obj):
