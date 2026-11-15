@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- **Ray-Traced Body Sweep** (Işın İzlemeli Body Sweep, `pda_bodysweep_raytraced.py`, branch `body-sweep`, not yet in the
+  GUI): a new envelope method that also handles **non-convex** tools (L, T, hammer, hourglass) and twist.
+  The tool silhouette along the path gives a template loop with a fixed point count (sharp corners become creases,
+  with two extra columns at +/- eps). Every section plane is cut by the tool copies that cross it and the 2D union
+  (shapely) is the section. Each template point is mapped into every section by a ray along the template normal,
+  smoothed over +/- R so rays never cross before the shift caused by rotation / twist (R is set from the twist and the
+  path curvature); the outermost hit is taken, predicted with the frame of the body centred on the plane. The quad
+  cage gives one B-spline surface per strip between creases (interpolating across, SubD-like control net along the
+  path); planar caps close it, and only the parts of the start / end bodies that stick out of the cage are fused on
+  (exact fuse first - the fuzzy fuse was seen to drop parts of the end body). Follow path (RMF) or Z up, twist,
+  clearance. Test bench `tests/fc_bodysweep_raytraced.py` (inside FreeCAD): 8 tools (filleted box, cola lying /
+  twisted, L, D, T, hammer, hourglass), 180 degree twist: 0 folds, valid solids and cuts, tool at most 0.13-0.45 mm
+  outside the sweep, 3-9 s each. Usage: select tool, path, solids to cut, then
+  `import pda_bodysweep_raytraced as rbs; rbs.run_selection(twist_deg=0, mode="rmf", clearance=0)`.
 - **Body Sweep** (work in progress, branch `body-sweep`): sweep a solid tool (any Body / Part solid) along a path and
   cut one or more Bodies with the swept volume. One Body Sweep object holds the envelope; every PartDesign Body to cut
   gets a light Body Sweep Cut step, other solids a Part Cut. Toolbar command + task panel: tool, path, bodies to cut,
