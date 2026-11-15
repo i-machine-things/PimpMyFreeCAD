@@ -293,6 +293,14 @@ TR = {
         'Güncel',
     'World Z up':
         'Dünya Z yukarı',
+    'Method':
+        'Yöntem',
+    'Fast':
+        'Hızlı',
+    'Exact':
+        'Kesin',
+    'Fast: copies of the tool, plane sections and their outer boundary (seconds; sharp edges of the tool are slightly rounded, ~0.5 mm). Exact: exact sections and corner tracks (convex tools, minutes)':
+        'Hızlı: aletin kopyaları, düzlem kesitleri ve dış sınırları (saniyeler; aletin keskin kenarları hafif yuvarlanır, ~0,5 mm). Kesin: kesin kesitler ve köşe izleri (dışbükey aletler, dakikalar)',
     'Undo':
         'Geri al',
     'Redo':

@@ -7,6 +7,11 @@
   gets a light Body Sweep Cut step, other solids a Part Cut. Toolbar command + task panel: tool, path, bodies to cut,
   **Orientation** (Follow path: rotation-minimizing frame, also on vertical / 3D paths and helices; World Z up;
   optional support face), **Twist** -360..360 degrees, **Tolerance** (0.2 mm for a quick draft).
+  **Method**: Fast (default) - the tool as a mesh copied densely along the path into one mesh, plane sections
+  perpendicular to the path (linear density ramp at both ends), only the outermost points of every section (rays from
+  its centre), a smooth B-spline loft: seconds (cola 180 degree twist: 29 s vs 118 s, -0.19 %; chamfered box 3D path
+  90 degree twist: 8 s vs 19 s, -0.47 %); sharp tool edges are rounded by ~0.3-0.6 mm and a section must be star
+  shaped about its centre. Exact - the exact-section envelope (convex tools).
   The envelope is computed in a background thread (FreeCAD stays responsive, progress in the panel, Stop) and stored
   in the object; a recompute only cuts, unless the inputs changed. Convex tools only for now. Needs scipy and shapely.
   The swept envelope is built directly from exact sections perpendicular to the path (no boolean of many copies),

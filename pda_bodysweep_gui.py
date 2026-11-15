@@ -112,6 +112,17 @@ class Panel(object):
         self.twist.setValue(float(obj.Twist))
         self.twist.valueChanged.connect(lambda v: self.set_prop("Twist", float(v)))
         grid.addWidget(self.twist, 2, 1, 1, 2)
+        grid.addWidget(QtWidgets.QLabel(T("Method")), 4, 0)
+        bf.method_prop(obj)
+        self.method = QtWidgets.QComboBox()
+        for v, text in zip(bf.METHODS, (T("Fast"), T("Exact"))):
+            self.method.addItem(text, v)
+        self.method.setToolTip(T("Fast: copies of the tool, plane sections and their outer boundary (seconds; sharp edges "
+                                 "of the tool are slightly rounded, ~0.5 mm). Exact: exact sections and corner tracks "
+                                 "(convex tools, minutes)"))
+        self.method.setCurrentIndex(bf.METHODS.index(obj.Method))
+        self.method.currentIndexChanged.connect(lambda i: self.set_prop("Method", bf.METHODS[i]))
+        grid.addWidget(self.method, 4, 1, 1, 2)
         grid.addWidget(QtWidgets.QLabel(T("Tolerance")), 3, 0)
         self.tol = QtWidgets.QDoubleSpinBox()
         self.tol.setRange(0.001, 1.0)

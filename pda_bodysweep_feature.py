@@ -17,6 +17,7 @@ import pda_railpipe as rp
 from pda_i18n import T
 
 ORIENT = ["Follow path", "World Z"]
+METHODS = ["Fast", "Exact"]
 TWIST_MAX = 360.0
 ICONS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons")
 
@@ -69,8 +70,20 @@ def support_face(obj):
     return f if f is not None and not f.isNull() else None
 
 
+def method_prop(obj):
+    """Eski dosyalar: Method ozelligi Exact ile eklenir (kayitli zarf gecerli kalir); yeni nesnede varsayilan Fast."""
+    if "Method" not in obj.PropertiesList:
+        obj.addProperty("App::PropertyEnumeration", "Method", "Body Sweep",
+                        "Fast: copies of the tool, plane sections and their outer boundary (seconds; sharp edges of "
+                        "the tool are slightly rounded, ~0.5 mm). Exact: exact sections and corner tracks (convex tools, "
+                        "minutes)")
+        obj.Method = METHODS
+        obj.Method = "Exact"
+
+
 def params(obj):
-    return dict(orient="path" if obj.Orientation == ORIENT[0] else "z",
+    return dict(method="exact" if getattr(obj, "Method", "Exact") == "Exact" else "fast",
+                orient="path" if obj.Orientation == ORIENT[0] else "z",
                 twist_deg=max(-TWIST_MAX, min(TWIST_MAX, float(obj.Twist))),
                 sec_tol=max(float(obj.Tolerance), 1e-3), fit_tol=max(float(obj.Tolerance), 1e-3))
 
@@ -105,6 +118,10 @@ def inputs(obj):
 
 def compute(tool, edges, sup, p, progress=None, cancel=None):
     """Supurulmus kati ya da hata metni (iptalde "cancelled"). Arka plan is parcaciginda da cagrilabilir."""
+    p = dict(p)
+    if p.pop("method", "exact") == "fast":
+        import pda_bodysweep_fast as fs
+        return fs.run(tool, edges, sup, progress=progress, cancel=cancel, **p)
     import pda_bodysweep as bs
     out = bs.run(None, tool, edges, None, sup, show=False, verify=False, progress=progress, cancel=cancel, **p) or {}
     if "error" in out:
@@ -139,6 +156,8 @@ class BodySweep:
         obj.addProperty("App::PropertyLength", "Tolerance", "Body Sweep",
                         "Largest deviation of the envelope: smaller is more exact and slower (0.2 mm for a quick draft)")
         obj.Tolerance = 0.02
+        method_prop(obj)
+        obj.Method = "Fast"
         obj.addProperty("App::PropertyLinkListGlobal", "Targets", "Body Sweep",
                         "Bodies / solids cut by the sweep (managed by the panel)")
         obj.setPropertyStatus("Targets", "ReadOnly")
@@ -167,7 +186,7 @@ class BodySweep:
         obj.Shape = obj.SweptShape.copy()
 
     def onDocumentRestored(self, obj):
-        pass
+        method_prop(obj)
 
     def dumps(self):
         return None
