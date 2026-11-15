@@ -6,13 +6,15 @@
 # gizmosu. Yesil connector noktalari kesitlerin dikisini duzeltir, kenar uclarini ve ortalarini yakalar (secilen rehber
 # varken eslesmeyi rehber belirler, gizlenir). Surukerken yalniz
 # numpy ile hafif ag; fare birakilinca gercek B-spline yuzey (boolean yok), Zebra aciksa yansima cizgileriyle.
-# Kati OK'e basinca hesaplanir; OK degisiklikleri tek geri alma adimi olarak birakir, Cancel geri alir.
+# Kati OK'e basinca hesaplanir; OK degisiklikleri tek geri alma adimi olarak birakir, Cancel geri alir. Duzenleme
+# sirasinda Ctrl+Z / Ctrl+Shift+Z (Ctrl+Y) duzenleyicinin kendi adimlarini geri alir / yineler (FreeCAD'in Undo'su acik
+# islemde calismiyor; kisayollari duzenleme boyunca devralinir).
 import numpy as np
 
 import FreeCAD as App
 import FreeCADGui as Gui
 from pivy import coin
-from PySide import QtCore, QtWidgets
+from PySide import QtCore, QtGui, QtWidgets
 
 import pda_common as sm
 import pda_magicloft as ml
@@ -23,6 +25,10 @@ _editor = None
 fresh = None                                               # komutun yeni olusturdugu nesne: Cancel onu da geri alir
 STRIPES = 32                                              # zebra dokusu: 16 acik, 16 koyu serit
 PREVIEW_ALPHA = 0.3                                        # gercek yuzey onizlemesinin saydamligi (zebra opak kalir)
+HIST_PROPS = ("Profiles", "ProfilesSizes", "Guides", "GuidesSizes", "AutoGuides", "GuideCount", "AutoGuideRails",
+              "AutoGuideV", "AutoGuideOffsets", "ConnectorOffsets", "StartConstraint", "EndConstraint", "StartStrength",
+              "EndStrength", "FitTolerance", "GuideSpread", "SectionSmoothing", "Refine")   # duzenleyici geri alma kaydi
+HIST_MAX = 200
 SNAP_PX = 12.0                                             # connector kenar ucu / ortasini bu kadar pikselden yakalar
 
 
@@ -130,6 +136,8 @@ class Editor(object):
         self.cb_btn = self.view.addEventCallbackPivy(coin.SoMouseButtonEvent.getClassTypeId(), self.on_btn)
         self.cb_mov = self.view.addEventCallbackPivy(coin.SoLocation2Event.getClassTypeId(), self.on_move)
         self.panel = Panel(self)
+        self.hist, self.future = [], []                    # geri alma: ozellik anlik goruntuleri (son = su anki)
+        self._keys_on()
         self.reload()
         Gui.Control.closeDialog()
         Gui.Control.showDialog(self.panel)
@@ -302,7 +310,101 @@ class Editor(object):
     def _clear_real(self):
         self.real.removeAllChildren()
 
+    # --- geri alma (duzenleyicinin kendi adimlari) ---
+    def _snap(self):
+        out = []
+        for n in HIST_PROPS:
+            if n not in self.obj.PropertiesList:
+                continue
+            v = getattr(self.obj, n)
+            if isinstance(v, list):
+                v = list(v)
+            out.append((n, v))
+        return out
+
+    @staticmethod
+    def _key(snap):
+        def norm(v):
+            if isinstance(v, (list, tuple)):
+                return tuple(norm(x) for x in v)
+            if isinstance(v, App.Vector):
+                return (round(v.x, 9), round(v.y, 9), round(v.z, 9))
+            if hasattr(v, "Name") and hasattr(v, "Document"):
+                return v.Name
+            if hasattr(v, "Value"):
+                return v.Value
+            return v
+        return tuple((n, norm(v)) for n, v in snap)
+
+    def checkpoint(self):
+        """Durum degistiyse kaydet (gercek yuzey her degisiklikten sonra cizildiginden show_real cagirir)."""
+        snap = self._snap()
+        if self.hist and self._key(self.hist[-1]) == self._key(snap):
+            return
+        self.hist.append(snap)
+        del self.hist[:-HIST_MAX]
+        self.future = []
+        self.panel.sync()
+
+    def _restore(self, snap):
+        for n, v in snap:
+            try:
+                if self._key([(n, getattr(self.obj, n))]) != self._key([(n, v)]):
+                    setattr(self.obj, n, v)
+            except Exception:
+                pass
+        self.picked, self.span, self.drag = [], None, None
+        self.panel.refresh_values()
+        self.reload()
+
+    def undo(self):
+        if self.drag is not None or len(self.hist) < 2:
+            return
+        self.future.append(self.hist.pop())
+        self._restore(self.hist[-1])
+
+    def redo(self):
+        if self.drag is not None or not self.future:
+            return
+        snap = self.future.pop()
+        self.hist.append(snap)
+        self._restore(snap)
+
+    def _keys_on(self):
+        """FreeCAD'in Undo / Redo kisayollari duzenleme boyunca bu duzenleyiciye gecer."""
+        mw = Gui.getMainWindow()
+        QAction = getattr(QtGui, "QAction", None) or QtWidgets.QAction
+        QShortcut = getattr(QtGui, "QShortcut", None) or QtWidgets.QShortcut
+        self.std_keys = []
+        for a in mw.findChildren(QAction):
+            if a.objectName() in ("Std_Undo", "Std_Redo"):
+                self.std_keys.append((a, a.shortcuts()))
+                a.setShortcuts([])
+        self.shortcuts = []
+        for seq, fn in (("Ctrl+Z", self.undo), ("Ctrl+Shift+Z", self.redo), ("Ctrl+Y", self.redo)):
+            sc = QShortcut(QtGui.QKeySequence(seq), mw)
+            sc.setContext(QtCore.Qt.ApplicationShortcut)
+            sc.activated.connect(fn)
+            self.shortcuts.append(sc)
+
+    def _keys_off(self):
+        for sc in getattr(self, "shortcuts", []):
+            try:
+                sc.setEnabled(False)
+                sc.deleteLater()
+            except Exception:
+                pass
+        self.shortcuts = []
+        for a, keys in getattr(self, "std_keys", []):
+            try:
+                a.setShortcuts(keys)
+            except Exception:
+                pass
+        self.std_keys = []
+
     def show_real(self):
+        if self.drag is None:
+            self.checkpoint()
         self._clear_real()
         if self.skin is None or not self.show_preview or self.drag is not None:
             return
@@ -701,6 +803,7 @@ class Editor(object):
         if getattr(self, "closed", False):
             return
         self.closed = True
+        self._keys_off()
         if not getattr(self, "finished", False):
             self.doc.commitTransaction()
             self.obj.touch()
@@ -730,6 +833,16 @@ class Panel(object):
         self.err.setWordWrap(True)
         self.err.setStyleSheet("color: #d9534f;")
         lay.addWidget(self.err)
+        row = QtWidgets.QHBoxLayout()                      # duzenleyicinin kendi geri alma adimlari
+        self.b_undo = QtWidgets.QPushButton(T("Undo"))
+        self.b_undo.setToolTip(T("Undo the last edit in this panel (Ctrl+Z)"))
+        self.b_undo.clicked.connect(lambda checked=False: self.ed.undo())
+        self.b_redo = QtWidgets.QPushButton(T("Redo"))
+        self.b_redo.setToolTip(T("Redo (Ctrl+Shift+Z or Ctrl+Y)"))
+        self.b_redo.clicked.connect(lambda checked=False: self.ed.redo())
+        row.addWidget(self.b_undo)
+        row.addWidget(self.b_redo)
+        lay.addLayout(row)
         # profiller
         g = QtWidgets.QGroupBox(T("Profiles"))
         grid = QtWidgets.QGridLayout(g)
@@ -841,12 +954,14 @@ class Panel(object):
         tol.setToolTip(T("Largest deviation of the surface fit: smaller is more exact, larger has fewer control points"))
         tol.setValue(float(ed.obj.FitTolerance))
         tol.valueChanged.connect(lambda v: self.ed.set_prop("FitTolerance", float(v)))
+        self.tol = tol
         grid.addWidget(tol, 1, 1)
         grid.addWidget(QtWidgets.QLabel(T("Section smoothing")), 2, 0)
         smooth = self._spin(0.0, 5.0, 3, " mm", 0.05)
         smooth.setToolTip(T("Smooths line-to-arc joints in a profile, up to this deviation from the sketch; 0 follows it exactly"))
         smooth.setValue(float(ed.obj.SectionSmoothing))
         smooth.valueChanged.connect(lambda v: self.ed.set_prop("SectionSmoothing", float(v)))
+        self.smooth = smooth
         grid.addWidget(smooth, 2, 1)
         own = QtWidgets.QCheckBox(T("New Magic Lofts in their own Body"))
         own.setChecked(pda_commands.own_body("MagicLoftOwnBody"))
@@ -870,6 +985,21 @@ class Panel(object):
     def _label(item):
         o, subs = item
         return o.Label + (" : " + ", ".join(subs) if subs else "")
+
+    def refresh_values(self):
+        """Geri alma / yineleme sonrasi: alanlar nesnedeki degerlere (sinyal gondermeden)."""
+        o = self.ed.obj
+        vals = [(self.auto, "setChecked", bool(o.AutoGuides)), (self.count, "setValue", int(o.GuideCount)),
+                (self.spread, "setValue", float(o.GuideSpread)), (self.tol, "setValue", float(o.FitTolerance)),
+                (self.smooth, "setValue", float(o.SectionSmoothing))]
+        for name, (c, sp) in self.ends.items():
+            vals += [(c, "setCurrentIndex", ml.ENDS.index(getattr(o, name + "Constraint"))),
+                     (sp, "setValue", float(getattr(o, name + "Strength")))]
+        for wdg, fn, v in vals:
+            wdg.blockSignals(True)
+            getattr(wdg, fn)(v)
+            wdg.blockSignals(False)
+        self.fill_lists()
 
     def fill_lists(self):
         for box, name in ((self.profiles, "Profiles"), (self.guides, "Guides")):
@@ -931,6 +1061,8 @@ class Panel(object):
 
     def sync(self):
         ed = self.ed
+        self.b_undo.setEnabled(len(getattr(ed, "hist", [])) > 1)
+        self.b_redo.setEnabled(bool(getattr(ed, "future", [])))
         self.err.setText(ed.error or "")
         self.err.setVisible(bool(ed.error))
         auto = bool(ed.obj.AutoGuides)

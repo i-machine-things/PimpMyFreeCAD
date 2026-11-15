@@ -8,6 +8,9 @@
   of a hollow part) and sketch Make Internals are lofted as holes and cut out, like Rail Pipe. All profiles must have the
   same number of holes; end constraints (Normal / Tangent) also apply to the hole walls, and the hole walls follow the guides
   (selected or automatic), so the wall thickness stays the same. The preview shows the holes too.
+- Magic Loft edit panel: **Undo / Redo** of the edits made in the panel (guide points, connectors, constraints, profile and
+  guide lists, options) with Ctrl+Z and Ctrl+Shift+Z / Ctrl+Y or the panel buttons. FreeCAD's own Undo doesn't work while
+  the panel is open; its shortcuts are taken over until the panel closes.
 
 ## 0.3.0 (2026-11-06)
 
