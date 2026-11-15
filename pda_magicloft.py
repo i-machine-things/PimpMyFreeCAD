@@ -360,6 +360,8 @@ class Skin(object):
         self.S = self.A = None
         self.nu = None                                     # periyodik yuzeyin u kontrol noktasi; koseli yuzeyde None
         self.min_nu = 0
+        self.holes = []                                    # delik loftlari (Skin), katidan cikarilir
+        self.follow = None                                 # delik loftunda: rehberlerini izledigi dis Skin
         self._match()
 
     # kose eslestirme: en cok koseli kesit referans; obur koseler en yakin kirilmaya baglanir
@@ -546,7 +548,65 @@ class Skin(object):
             C = self.card(u)
             for j in range(len(self.us)):
                 R = R + C[:, j][:, None, None] * self.correction(j, v)[None, :, :]
+        if self.follow is not None:
+            R = R + self._follow(u, v)
         return R
+
+    def _follow_map(self):
+        """Delik -> dis yuzey eslemesi: her kesitte delik noktasina en yakin dis nokta (oran farki), (kesit, K)."""
+        p = self.follow
+        key = (tuple(s.shift for s in p.secs), tuple(s.shift for s in self.secs), id(p.card))
+        if getattr(self, "_fkey", None) == key:
+            return self._fmap
+        K = 360
+        uh = np.arange(K) / float(K)
+        uo = np.arange(720) / 720.0
+        H = self.base(uh, self.vn)
+        O = p.base(uo, p.vn)
+        n = len(uo)
+        offs = []
+        for i in range(len(self.vn)):
+            Oi, Hi = O[:, i, :], H[:, i, :]
+            k = np.argmin(((Hi[:, None, :] - Oi[None, :, :]) ** 2).sum(axis=-1), axis=1)
+            best = np.full(K, np.inf)
+            par = uo[k].copy()
+            for a in (k - 1, k):                           # en yakin dogru parcasina izdusum: basamaksiz esleme
+                a = a % n
+                b = (a + 1) % n
+                d = Oi[b] - Oi[a]
+                t = np.clip(((Hi - Oi[a]) * d).sum(axis=1) / np.maximum((d * d).sum(axis=1), 1e-18), 0, 1)
+                r = np.linalg.norm(Oi[a] + d * t[:, None] - Hi, axis=1)
+                ok = r < best
+                best[ok], par[ok] = r[ok], uo[a][ok] + t[ok] / n
+            off = par - uh
+            off -= np.round(off)
+            off = off[0] + np.concatenate([[0.0], np.cumsum(np.diff(off) - np.round(np.diff(off)))])
+            F = np.fft.rfft(off - off.mean())               # hafif suzme: kose gecislerinde kirpinti kalmasin
+            F *= np.exp(-2 * (math.pi * np.fft.rfftfreq(K) * 2.0) ** 2)
+            offs.append(np.fft.irfft(F, n=K) + off.mean())
+        self._fkey, self._fmap = key, np.array(offs)
+        return self._fmap
+
+    def _follow(self, u, v):
+        """Delik duvari dis yuzeyin rehberlerini izler: delik noktasi, dis yuzeyde ona en yakin noktanin rehber
+        duzeltmesi kadar kayar (duvar kalinligi korunur). Dis yuzeyde rehber yoksa sifir."""
+        p = self.follow
+        if not (len(p.us) and (p.rails or p.auto)):
+            return 0.0
+        offs = self._follow_map()
+        K = offs.shape[1]
+        xs = np.arange(K + 1) / float(K)
+        rows = np.stack([np.interp(u % 1.0, xs, np.append(o, o[0])) for o in offs])     # (kesit, len(u))
+        vc = np.clip(v, 0.0, 1.0)
+        W = np.stack([np.interp(vc, self.vn, (np.arange(len(self.vn)) == i).astype(float))
+                      for i in range(len(self.vn))])                                     # (kesit, len(v))
+        uo = (u[:, None] + rows.T.dot(W)) % 1.0                                          # (len(u), len(v))
+        vo = np.interp(vc, self.vn, p.vn)
+        C = p.card(uo.ravel()).reshape(len(u), len(v), -1)
+        out = np.zeros((len(u), len(v), 3))
+        for j in range(len(p.us)):
+            out += C[:, :, j, None] * p.correction(j, vo)[None, :, :]
+        return out
 
     def _v_range(self):
         return -self.tails[0], 1.0 + self.tails[1]
@@ -629,7 +689,7 @@ class Skin(object):
             out.append(s)
         return out
 
-    def solid(self):
+    def _outer_solid(self):
         surfs = self.surfaces()
         caps = [_cap([s.vIso(s.bounds()[k]).toShape() for s in surfs]) for k in (2, 3)]
         sh = Part.Shell([s.toShape() for s in surfs] + caps)
@@ -638,6 +698,45 @@ class Skin(object):
         if sol.Volume < 0:
             sol.reverse()
         return sol
+
+    def solid(self):
+        """Kati; delikli kesitte (yuzun ic telleri, sketch'te Make Internals) delik loftlari dis loftan cikarilir (Rail
+        Pipe'in delikleri gibi). Delik kapaklari dis kapaklarla ayni duzlemde: once toleranssiz, olmazsa toleransli."""
+        sol = self._outer_solid()
+        for h in self.holes:
+            hole = h._outer_solid()
+            size = max(hole.BoundBox.DiagonalLength, 1.0)
+            res = None
+            for fuzzy in (0.0, 1e-5 * size, 1e-3):
+                try:
+                    r = sol.copy().cut(hole.copy(), fuzzy) if fuzzy else sol.copy().cut(hole.copy())
+                except Exception:
+                    continue
+                want = sol.Volume - sol.common(hole).Volume
+                if r.Solids and r.isValid() and abs(r.Volume - want) <= 1e-3 * max(sol.Volume, 1e-9):
+                    res = r
+                    break
+            if res is None:
+                raise ValueError("the hole could not be cut from the loft")
+            sol = res.Solids[0] if len(res.Solids) == 1 else res
+        return sol
+
+    def cap_faces(self):
+        """Onizleme kapaklari: delikler kesilmis."""
+        surfs = self.surfaces()
+        out = []
+        for k in (2, 3):
+            f = _cap([s.vIso(s.bounds()[k]).toShape() for s in surfs])
+            for h in self.holes:
+                try:
+                    hs = h.surfaces()
+                    r = f.cut(_cap([s.vIso(s.bounds()[k]).toShape() for s in hs]))
+                    if r.Faces:
+                        f = r.Faces[0] if len(r.Faces) == 1 else Part.makeCompound(r.Faces)
+                except Exception:
+                    pass
+            out.append(f)
+        return out
 
 
 def _cap(edges):
@@ -782,6 +881,9 @@ def prepare(obj):
         secs[0].n = -secs[0].n
     if secs[-1].n.dot(secs[-1].c - secs[-2].c) < 0:
         secs[-1].n = -secs[-1].n
+    err = _add_holes(obj, sk, items, secs, tails, g, base)
+    if err:
+        return err
     if obj.AutoGuides:
         n = max(int(obj.GuideCount), 1)
         data = get_auto(obj)
@@ -796,6 +898,65 @@ def prepare(obj):
         if err:
             return err
     return sk
+
+
+def _add_holes(obj, sk, items, secs, tails, g, base):
+    """Delikler (yuzun ic telleri, sketch'te Make Internals): her delik kendi kesitlerinden ayri bir loft olur, katidan
+    cikarilir (Rail Pipe gibi). Butun profillerde delik sayisi esit olmali; alana, sonra dis merkeze uzakliga gore
+    eslesir. Delik duvari dis yuzeyin rehberlerini izler (bkz. Skin._follow); uc kisitlari ve uzantilar dis yuzeyinkiyle ayni. Hata metni ya da
+    None."""
+    hs = [rp.profile_holes((o, subs), g) for o, subs in items]
+    if not any(hs):
+        return None
+    if len(set(len(h) for h in hs)) > 1:
+        return T("Magic Loft: all profiles must have the same number of holes")
+    rows = []
+    for h, sec in zip(hs, secs):
+        c = V(*sec.c)
+        key = lambda w: (-round(Part.Face(w).Area, 6), (Part.Face(w).CenterOfMass - c).Length)
+        rows.append(sorted(h, key=key))
+    smooth = float(getattr(obj, "SectionSmoothing", 0.0))
+    for k in range(len(rows[0])):
+        try:
+            hsecs = [Section((r[k], None, None, False)) for r in rows]
+        except Exception:
+            return T("Magic Loft: the hole profile could not be read")
+        for h in hsecs:
+            h.smooth(smooth)
+        ends = []
+        for e, mode in ((0, obj.StartConstraint), (1, obj.EndConstraint)):
+            t = sk.t0 if e == 0 else sk.t1
+            ends.append("tan" if isinstance(t, str) else t)  # Dik: dis kesitle ayni yon (ayni duzlem)
+        try:
+            hk = Skin(hsecs, ends[0], ends[1], tails, sk.tol)
+        except Exception as ex:
+            return T("Magic Loft: the hole profile could not be read") + " (%s)" % ex
+        hk.strength = sk.strength if hasattr(sk, "strength") else (obj.StartStrength, obj.EndStrength)
+        hk.follow = sk                                     # dis yuzeyin rehberlerini izler
+        for e, (h, o_sec, nxt) in enumerate(((hsecs[0], secs[0], hsecs[1]), (hsecs[-1], secs[-1], hsecs[-2]))):
+            if not isinstance(hk.t0 if e == 0 else hk.t1, str):       # Serbest (None) ya da Dik (vektor)
+                continue
+            # teget tablosu hizalamadan (olasi flip) sonra: kesitin orneklerine gore
+            o, subs = items[0 if e == 0 else -1]
+            sh = rp._shape(o, None, g)
+            solid = sh if sh.Solids else base
+            tb = _tangent_table(h, solid) if solid is not None else None
+            if tb is None:                                 # deligin yaninda yuz yok: dik
+                sign = 1.0 if e == 0 else -1.0
+                n = o_sec.n if o_sec.n.dot(nxt.c - h.c) * sign > 0 else -o_sec.n
+                n = n * (obj.StartStrength if e == 0 else obj.EndStrength)
+                if e == 0:
+                    hk.t0 = n
+                else:
+                    hk.t1 = n
+                continue
+            h.tan = tb * (-1.0 if e else 1.0)
+        if hsecs[0].n.dot(hsecs[1].c - hsecs[0].c) < 0:
+            hsecs[0].n = -hsecs[0].n
+        if hsecs[-1].n.dot(hsecs[-1].c - hsecs[-2].c) < 0:
+            hsecs[-1].n = -hsecs[-1].n
+        sk.holes.append(hk)
+    return None
 
 
 def is_part(obj):
