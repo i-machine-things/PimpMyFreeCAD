@@ -4,6 +4,10 @@
 
 - Fixed `TypeError: int() argument must be ... not 'StandardButton'` in the Rail Pipe, Magic Loft and Dome task panels on
   newer PySide6 (FreeCAD 27.x), where `QDialogButtonBox.Ok` is an enum object instead of an int (issue #2).
+- Magic Loft / Magic Loft Cut profiles with **holes** gave a filled solid. Now the inner wires of a face (e.g. the ring face
+  of a hollow part) and sketch Make Internals are lofted as holes and cut out, like Rail Pipe. All profiles must have the
+  same number of holes; end constraints (Normal / Tangent) also apply to the hole walls, and the hole walls follow the guides
+  (selected or automatic), so the wall thickness stays the same. The preview shows the holes too.
 
 ## 0.3.0 (2026-11-06)
 

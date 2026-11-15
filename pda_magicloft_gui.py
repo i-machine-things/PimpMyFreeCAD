@@ -312,13 +312,18 @@ class Editor(object):
             App.Console.PrintWarning(T("Magic Loft: the surface failed (%s)") % e + "\n")
             return
         sub = self.obj.TypeId == "PartDesign::FeatureSubtractivePython"
-        for s in surfs:
-            self.real.addChild(self._surface_node(s, sub))
-        for k in (2, 3):                                   # kapaklar: katidaki yuzlerin aynisi
+        for h in self.skin.holes:                          # delik loftlari
             try:
-                self.real.addChild(self._cap_node(ml._cap([s.vIso(s.bounds()[k]).toShape() for s in surfs]), sub))
+                surfs = surfs + h.surfaces()
             except Exception as e:
                 App.Console.PrintWarning(T("Magic Loft: the surface failed (%s)") % e + "\n")
+        for s in surfs:
+            self.real.addChild(self._surface_node(s, sub))
+        try:                                               # kapaklar: katidaki yuzlerin aynisi (delikler kesilmis)
+            for f in self.skin.cap_faces():
+                self.real.addChild(self._cap_node(f, sub))
+        except Exception as e:
+            App.Console.PrintWarning(T("Magic Loft: the surface failed (%s)") % e + "\n")
 
     def _cap_node(self, face, sub):
         pts, tris = face.tessellate(0.05)
