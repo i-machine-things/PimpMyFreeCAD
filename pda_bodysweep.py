@@ -275,13 +275,33 @@ def run(doc, tool, guide, target=None, support=None, commit=None, fit_tol=0.01, 
                 exp = mesh_volume(tgt, vt) - mesh_volume(tgt.common(sol.fuse(pieces) if pieces else sol), vt)
                 L_("hacim: OCC %.1f | ag %.1f | beklenen %.1f" % (res.Volume, mesh_volume(res, vt), exp))
         else:
-            t = time.time(); res = sol.fuse(pieces, fuzzy) if pieces else sol.copy()
-            try:
-                res = res.removeSplitter()
-            except Exception:
-                pass
-            if res.Solids and len(res.Solids) == 1:
-                res = res.Solids[0]
+            t = time.time()
+            # uc parcalarini tupe yapistir. Fuzzy fuse bazen sessizce gecersiz, 3 yuzlu, hacimsiz sonuc veriyordu
+            # (pahli kutu, burulmasiz 3B yol): sonuc denetlenir, baska fuzzy degerleri denenir; hicbiri tutmazsa tup
+            # ve uc parcalari tek bilesik olarak verilir (hedeften kesmek icin yeterli: cut bilesigi de kabul eder)
+            want = sol.Volume + sum(q.Volume for q in pieces)
+            res = None
+            for fz in ((fuzzy, 0.01, 1e-3, 0.0) if pieces else (None,)):
+                try:
+                    if fz is None:
+                        r_ = sol.copy()
+                    else:
+                        r_ = sol.fuse(pieces, fz) if fz > 0 else sol.fuse(pieces)
+                    try:
+                        r_ = r_.removeSplitter()
+                    except Exception:
+                        pass
+                    if r_.Solids and len(r_.Solids) == 1:
+                        r_ = r_.Solids[0]
+                except Exception:
+                    continue
+                if r_.isValid() and r_.Solids and 0.9 * sol.Volume <= r_.Volume <= 1.001 * want:
+                    res = r_
+                    break
+                L_("uc parcalari birlesimi gecersiz (fuzzy %s), yeniden deneniyor" % fz)
+            if res is None:
+                L_("UYARI: uc parcalari yapistirilamadi, tup ve uc parcalari bilesik olarak verildi")
+                res = Part.makeCompound([sol] + pieces)
             L_("ZARF KATISI %.1fs: isValid %s, %d katı, %d yuz, en buyuk kenar toleransi %.4f"
                % (time.time() - t, res.isValid(), len(res.Solids), len(res.Faces), max(e.Tolerance for e in res.Edges)))
             if verify:
