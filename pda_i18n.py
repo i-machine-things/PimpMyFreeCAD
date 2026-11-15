@@ -203,6 +203,96 @@ TR = {
         'Sihirli Loft: bütün profillerde delik sayısı eşit olmalı',
     'Magic Loft: the hole profile could not be read':
         'Sihirli Loft: delik profili okunamadı',
+    'Body Sweep':
+        'Gövde Süpürme',
+    'Edit Body Sweep':
+        'Gövde Süpürmeyi düzenle',
+    'Bodies to cut':
+        'Kesilecek gövdeler',
+    'Body Sweep: select a face\n':
+        'Gövde Süpürme: bir yüz seçin\n',
+    'Body Sweep: select the path (edges or a sketch)':
+        'Gövde Süpürme: yolu seçin (kenarlar ya da sketch)',
+    'Body Sweep: select the path (edges or a sketch)\n':
+        'Gövde Süpürme: yolu seçin (kenarlar ya da sketch)\n',
+    'Body Sweep: select the tool solid':
+        'Gövde Süpürme: alet katısını seçin',
+    'Body Sweep: select the tool solid\n':
+        'Gövde Süpürme: alet katısını seçin\n',
+    'Body Sweep: the Body has no solid to cut':
+        "Gövde Süpürme: Body'de kesilecek katı yok",
+    'Body Sweep: the cut from the Body failed':
+        "Gövde Süpürme: Body'den kesme başarısız",
+    'Body Sweep: the inputs changed, computing the sweep (this can take minutes)...\n':
+        'Gövde Süpürme: girdiler değişti, süpürme hesaplanıyor (dakikalar sürebilir)...\n',
+    'Body Sweep: the path could not be read':
+        'Gövde Süpürme: yol okunamadı',
+    'Body Sweep: the path edges must form one chain':
+        'Gövde Süpürme: yol kenarları tek bir zincir olmalı',
+    'Body Sweep: the sweep failed (%s)':
+        'Gövde Süpürme: süpürme başarısız (%s)',
+    'Body Sweep: the sweep gave no solid':
+        'Gövde Süpürme: süpürmeden katı çıkmadı',
+    'Body Sweep: the tool has no solid':
+        'Gövde Süpürme: aletin katısı yok',
+    'Body Sweep: the tool must be one solid':
+        'Gövde Süpürme: alet tek bir katı olmalı',
+    'Clear':
+        'Temizle',
+    'Compute':
+        'Hesapla',
+    'Computing...':
+        'Hesaplanıyor...',
+    'Edges, a wire or a sketch; one chain':
+        'Kenarlar, tel ya da sketch; tek zincir',
+    'Follow path':
+        'Yolu takip et',
+    "Follow path: the tool turns with the path without twisting (rotation-minimizing frame), also on vertical and 3D paths. World Z up: the tool's top stays toward Z":
+        'Yolu takip et: alet yolla birlikte burulmadan döner (dönmeyi en aza indiren çerçeve), dikey ve 3B yollarda da. Dünya Z yukarı: aletin üstü hep Z tarafında kalır',
+    'From selection':
+        'Seçimden al',
+    'Largest deviation of the envelope: smaller is more exact and slower (0.2 mm for a quick draft)':
+        'Zarfın en büyük sapması: küçük değer daha doğru ve yavaş (hızlı taslak için 0,2 mm)',
+    'Motion':
+        'Hareket',
+    'Optional: the tool stays normal to this face (overrides Orientation)':
+        'İsteğe bağlı: alet bu yüze dik kalır (Yön ayarını geçersiz kılar)',
+    'Orientation':
+        'Yön',
+    'PartDesign Bodies get a Body Sweep Cut step, other solids a Part Cut':
+        "PartDesign Body'lerine Gövde Süpürme Kesimi adımı, diğer katılara Part Cut eklenir",
+    'Path':
+        'Yol',
+    'Press Compute (or OK) to build the sweep':
+        "Süpürmeyi kurmak için Hesapla'ya (ya da OK'e) basın",
+    'Starting...':
+        'Başlıyor...',
+    'Stop':
+        'Durdur',
+    'Stopped':
+        'Durduruldu',
+    'Stopping...':
+        'Durduruluyor...',
+    'Support face':
+        'Destek yüzü',
+    'Sweep a solid tool along a path and cut one or more Bodies with the swept volume. Select the tool, the path (edges or a sketch) and the Bodies to cut, in this order':
+        'Bir alet katısını yol boyunca süpürür ve süpürülen hacimle bir ya da birden fazla gövdeyi keser. Sırayla aleti, yolu (kenarlar ya da sketch) ve kesilecek gövdeleri seçin',
+    'The solid that moves along the path (any Body / Part)':
+        'Yol boyunca hareket eden katı (herhangi bir Body / Part)',
+    'Tolerance':
+        'Tolerans',
+    'Tool':
+        'Alet',
+    'Tool and path':
+        'Alet ve yol',
+    'Total turn of the tool about the path along its length; the sign sets the direction':
+        'Aletin yol ekseni etrafında yol boyunca toplam dönüşü; işaret yönü belirler',
+    'Twist':
+        'Burulma',
+    'Up to date':
+        'Güncel',
+    'World Z up':
+        'Dünya Z yukarı',
     'Undo':
         'Geri al',
     'Redo':

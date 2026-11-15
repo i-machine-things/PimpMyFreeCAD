@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <!-- block -->
+  <path d="M4 26 L60 26 L60 58 L4 58 Z" fill="#71859f"/>
+  <path d="M4 26 L14 14 L54 14 L60 26 Z" fill="#aebbd0"/>
+  <!-- swept groove cut into the top -->
+  <path d="M8 24 C20 24 24 16 40 16 L56 16 L56 22 L40 22 C26 22 22 30 8 30 Z" fill="#b6443b"/>
+  <path d="M8 27 C20 27 24 19 40 19 L56 19" fill="none" stroke="#f5c518" stroke-width="2" stroke-dasharray="3 2"/>
+</svg>

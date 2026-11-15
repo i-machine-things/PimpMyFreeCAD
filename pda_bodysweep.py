@@ -55,6 +55,35 @@ def surface_ups(face, pts):
     return np.array(ups)
 
 
+def rmf_ups(pts, tg, up0=None):
+    """Yolu takip et: donmeyi en aza indiren cerceve (cift yansima, Wang 2008). Baslangicta yukari yon dunya Z (yol
+    oradan dikeyse X), sonra yol boyunca burulmadan tasinir: Frenet gibi duz kisimda tanimsiz kalmaz, egrilik yon
+    degistirince ters donmez."""
+    if up0 is None:
+        up0 = np.array([0, 0, 1.0])
+        if np.linalg.norm(np.cross(tg[0], up0)) < 1e-3:
+            up0 = np.array([1.0, 0, 0])
+    r = up0 - tg[0] * (tg[0] @ up0)
+    r /= np.linalg.norm(r)
+    out = np.zeros_like(pts)
+    out[0] = r
+    for i in range(len(pts) - 1):
+        v1 = pts[i + 1] - pts[i]
+        c1 = v1 @ v1
+        if c1 < 1e-24:
+            out[i + 1] = r
+            continue
+        rL = r - (2 / c1) * (v1 @ r) * v1
+        tL = tg[i] - (2 / c1) * (v1 @ tg[i]) * v1
+        v2 = tg[i + 1] - tL
+        c2 = v2 @ v2
+        r = rL - (2 / c2) * (v2 @ rL) * v2 if c2 > 1e-24 else rL
+        r = r - tg[i + 1] * (tg[i + 1] @ r)
+        r /= np.linalg.norm(r)
+        out[i + 1] = r
+    return out
+
+
 def min_turn_radius(pts, ups=None):
     s = np.r_[0, np.cumsum(np.linalg.norm(np.diff(pts, axis=0), axis=1))]
     tg = np.gradient(pts, s, axis=0); tg /= np.linalg.norm(tg, axis=1, keepdims=True)
@@ -100,15 +129,23 @@ def _solid(x):
 
 
 # ---------------------------------------------------------------------- main
+class Cancelled(Exception):
+    pass
+
+
 def run(doc, tool, guide, target=None, support=None, commit=None, fit_tol=0.01, min_strip=1.0,
         min_track_len=10.0, twist_deg=0.0, result_name="BodySweepResult", show=True,
-        verify=True, adaptive=True, sec_tol=0.01, fuzzy=0.05, workers=None):
+        verify=True, adaptive=True, sec_tol=0.01, fuzzy=0.05, workers=None, orient="z", progress=None,
+        cancel=None):
     """tool / target: objects or shapes; guide: object, shape or list of edges;
     support: a face (or object whose first face is used) the tool stays normal to;
     workers: threads for the exact sections (default cpu count - 2; 1 = serial);
     fuzzy: boolean fuzzy value (mm) gluing the tube end caps to the exact end pieces;
     twist_deg: total roll of the tool about the path tangent, spread evenly over the
     path length (a Draft polar array along its own axis is such a screw motion).
+    orient: "z" (the tool's up stays toward world Z), "path" (follows the path with a rotation-minimizing frame;
+    works on vertical and 3D paths) - a support face overrides both.
+    progress(text): called with every log line; cancel: threading.Event, stops the run (out["error"] = "cancelled").
     Without a target the result is the swept solid itself."""
     import pda_bodysweep_sections as es
     import pda_bodysweep_brep as bb
@@ -117,6 +154,10 @@ def run(doc, tool, guide, target=None, support=None, commit=None, fit_tol=0.01, 
     T0 = time.time()
     def L_(s):
         line = "%5.1fs %s" % (time.time() - T0, s); log.append(line); logf.write(line + "\n"); logf.flush()
+        if progress is not None:
+            progress(s)
+        if cancel is not None and cancel.is_set():
+            raise Cancelled()
     out = None
     try:
         tsh = _solid(tool)
@@ -141,6 +182,8 @@ def run(doc, tool, guide, target=None, support=None, commit=None, fit_tol=0.01, 
         if support is not None:
             face = support if isinstance(support, Part.Face) else _shape(support).Faces[0]
             ups = surface_ups(face, pts); frame = "destek yuzeyi normali"
+        elif orient == "path":
+            ups = rmf_ups(pts, tg); frame = "yolu takip (RMF)"
         else:
             ups = np.array([0, 0, 1.0]) - tg * tg[:, 2:3]; frame = "dunya Z"
             if np.linalg.norm(ups, axis=1).min() < 1e-3:
@@ -163,6 +206,7 @@ def run(doc, tool, guide, target=None, support=None, commit=None, fit_tol=0.01, 
             L_("UYARI: viraj aletten dar, kesit duzlemleri zarfin icinde kesisebilir")
         pose_step = max(0.25, path.L / 2000)
         sw = es.Sweep(tool_c, path, pose_step=pose_step, ends="tube")
+        sw.cancel = cancel
         # how far the tube must reach past the path ends: behind the start, back to
         # the rearmost point of the tool's forward-facing faces; past the end, up to the
         # foremost point of its backward-facing faces (0 for a tool centred on the path)
@@ -253,9 +297,13 @@ def run(doc, tool, guide, target=None, support=None, commit=None, fit_tol=0.01, 
                     target.ViewObject.Visibility = False
                 doc.recompute()
             commit(apply)
-    except Exception:
-        import traceback; L_("HATA " + traceback.format_exc()[-1500:])
-    L_("bitti"); logf.close()
+    except Cancelled:
+        out = dict(error="cancelled")
+    except Exception as e:
+        import traceback
+        log.append("HATA " + traceback.format_exc()[-1500:]); logf.write(log[-1] + "\n")
+        out = dict(error=str(e) or e.__class__.__name__)
+    log.append("bitti"); logf.write("bitti\n"); logf.close()
     return out
 
 

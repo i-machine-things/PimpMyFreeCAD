@@ -134,6 +134,9 @@ class Sweep:
         self.Vw = np.concatenate(self.Vp, axis=1)                        # (n,nv,3)
         Vall = np.concatenate([T.V for T in self.parts])
         diam = 2 * np.max(np.linalg.norm(Vall - Vall.mean(0), axis=1))
+        # a section only sees poses this far along the path: on a coil (helix) the plane also cuts the turns above and
+        # below, and those pieces made the section jump between turns (80 mm misfits, column fit failed)
+        self.reach = 3.0 * np.max(np.linalg.norm(Vall, axis=1)) + 2 * (self.ps[1] - self.ps[0])
         self.blend = blend if blend is not None else 1.5 * diam
         if ends != "blend":
             self.cap = None
@@ -172,11 +175,15 @@ class Sweep:
         return base + c["n"] @ (X - c["p"]) / (c["n"] @ c["t"])
 
     def section(self, s):
+        c = getattr(self, "cancel", None)
+        if c is not None and c.is_set():                 # Body Sweep paneli: Iptal
+            from pda_bodysweep import Cancelled
+            raise Cancelled()
         P, M = self.frame(s)
         t, y, a = M[:, 0], M[:, 1], M[:, 2]
         polys = []
         for T, Vp in zip(self.parts, self.Vp):
-            polys += self._part_polys(T, Vp, P, t, y, a)
+            polys += self._part_polys(T, Vp, P, t, y, a, s)
         U = unary_union(polys) if polys else None
         if U is None or U.is_empty:
             return P, M, None
@@ -187,11 +194,12 @@ class Sweep:
             U = max(U.geoms, key=lambda g: g.area)
         return P, M, (U if not U.is_empty else None)
 
-    def _part_polys(self, T, Vw, P, t, y, a):
+    def _part_polys(self, T, Vw, P, t, y, a, s=None):
         D = (Vw - P) @ t                                                 # (n,nv)
         E = T.E; ei, ej = E[:, 0], E[:, 1]
         lo = np.minimum(D[:-1].min(1), D[1:].min(1)); hi = np.maximum(D[:-1].max(1), D[1:].max(1))
-        sel = np.where((lo <= 0) & (hi >= 0))[0]
+        near = True if s is None else np.abs(self.ps[:-1] - s) <= self.reach
+        sel = np.where((lo <= 0) & (hi >= 0) & near)[0]
         if len(sel) == 0:
             return []
         # continuous motion between pose k and k+1: hull of both cuts and the points

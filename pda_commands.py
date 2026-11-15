@@ -154,6 +154,33 @@ class _MagicLoft:
         pda_magicloft_gui.fresh = None
 
 
+class _BodySweep:
+    """Body Sweep: bir alet katisini yol boyunca supur, zarfla bir ya da birden fazla govdeyi kes (pda_bodysweep_feature).
+    Secim sirasi: alet katisi, yol (sketch / kenarlar), kesilecek govdeler; eksikler panelde secilir."""
+
+    def GetResources(self):
+        return {"Pixmap": os.path.join(ICONS, "pda_bodysweep.svg"), "MenuText": T("Body Sweep"),
+                "ToolTip": T("Sweep a solid tool along a path and cut one or more Bodies with the swept volume. Select "
+                             "the tool, the path (edges or a sketch) and the Bodies to cut, in this order")}
+
+    def IsActive(self):
+        return App.ActiveDocument is not None
+
+    def Activated(self):
+        import pda_bodysweep_feature as bf
+        tool, path, targets = bf.classify(Gui.Selection.getSelectionEx())
+        doc = App.ActiveDocument
+        doc.openTransaction(T("Body Sweep"))
+        new = bf.make(doc, tool, path, targets)
+        doc.recompute()
+        doc.commitTransaction()
+        Gui.Selection.clearSelection()
+        import pda_bodysweep_gui                           # panelin Cancel'i bu olusturma adimini da geri alir
+        pda_bodysweep_gui.fresh = new
+        Gui.ActiveDocument.setEdit(new, 0)
+        pda_bodysweep_gui.fresh = None
+
+
 class _Dome:
     """Dome: secili duz yuzden kenarlarda komsu yuzlere teget kubbe (pda_dome). Gorev paneli hemen acilir."""
 
@@ -314,7 +341,7 @@ class _StepCheck:
         pda_stepcheck.show(objs)
 
 
-COMMANDS = ["PDA_RailPipe", "PDA_RailGroove", "PDA_MagicLoft", "PDA_MagicLoftCut", "PDA_Dome"]
+COMMANDS = ["PDA_RailPipe", "PDA_RailGroove", "PDA_MagicLoft", "PDA_MagicLoftCut", "PDA_Dome", "PDA_BodySweep"]
 OPTIONS = ["PDA_RailPipeOwnBody", "PDA_Matcap", "PDA_StepCheck"]
 
 Gui.addCommand("PDA_RailPipe", _RailPipe(False))
@@ -322,6 +349,7 @@ Gui.addCommand("PDA_RailGroove", _RailPipe(True))
 Gui.addCommand("PDA_MagicLoft", _MagicLoft(False))
 Gui.addCommand("PDA_MagicLoftCut", _MagicLoft(True))
 Gui.addCommand("PDA_Dome", _Dome())
+Gui.addCommand("PDA_BodySweep", _BodySweep())
 Gui.addCommand("PDA_RailPipeOwnBody", _OwnBody())
 for _m in MATCAPS:
     Gui.addCommand("PDA_Matcap_" + _m[1], _MatcapChoice(*_m))

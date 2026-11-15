@@ -8,7 +8,7 @@ import FreeCADGui as Gui
 
 class PimpMyPartDesignWorkbench(Gui.Workbench):
     MenuText = "Pimp My FreeCAD"
-    ToolTip = "Extra modeling tools for PartDesign and Part: Rail Pipe / Rail Groove along an editable guide curve, Magic Loft, Dome"
+    ToolTip = "Extra modeling tools for PartDesign and Part: Rail Pipe / Rail Groove along an editable guide curve, Magic Loft, Dome, Body Sweep"
 
     def __init__(self):
         import pda_commands
@@ -41,7 +41,7 @@ class _PartDesignTools:
         return ([{"append": c, "toolBar": "Part Design Modeling Features"}
                  for c in pda_commands.COMMANDS + pda_commands.OPTIONS]
                 + [{"append": c, "toolBar": "Part Tools"}          # ("insert" + "toolItem": Part_Sweep yerlesmiyordu)
-                   for c in ("PDA_RailPipe", "PDA_MagicLoft", "PDA_Matcap", "PDA_StepCheck")])
+                   for c in ("PDA_RailPipe", "PDA_MagicLoft", "PDA_BodySweep", "PDA_Matcap", "PDA_StepCheck")])
 
 
 class _RestoreObserver:
@@ -77,6 +77,10 @@ class _RestoreObserver:
                for o in doc.Objects):
             import pda_dome
             pda_dome.repair_proxies(doc)
+        if any("SweptShape" in o.PropertiesList and type(getattr(o, "Proxy", None)).__module__ != "pda_bodysweep_feature"
+               for o in doc.Objects):
+            import pda_bodysweep_feature
+            pda_bodysweep_feature.repair_proxies(doc)
         if App.ParamGet("User parameter:BaseApp/Preferences/Mod/PimpMyPartDesign").GetString("Matcap", ""):
             import pda_matcap                              # son secilen gorunum; kapaliyken modul yuklenmez
             pda_matcap.restore()

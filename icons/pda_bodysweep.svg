@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <!-- swept envelope along a curved path -->
+  <path d="M6 46 C18 46 22 20 40 18 L54 18 L54 30 L42 30 C30 32 26 58 10 58 Z" fill="#7fa7d6" opacity="0.85"/>
+  <path d="M8 52 C20 52 24 26 40 24 L56 24" fill="none" stroke="#f5c518" stroke-width="2.5" stroke-dasharray="4 3"/>
+  <!-- tool solid at the start and end -->
+  <path d="M2 42 L14 42 L14 58 L2 58 Z" fill="#3f6fa8"/>
+  <path d="M2 42 L6 38 L18 38 L14 42 Z" fill="#9fc0e6"/>
+  <path d="M14 42 L18 38 L18 54 L14 58 Z" fill="#2c5487"/>
+  <path d="M48 14 L60 14 L60 30 L48 30 Z" fill="#3f6fa8"/>
+  <path d="M48 14 L52 10 L64 10 L60 14 Z" fill="#9fc0e6"/>
+</svg>

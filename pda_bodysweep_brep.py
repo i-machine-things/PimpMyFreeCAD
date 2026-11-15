@@ -98,9 +98,17 @@ def column_curves(env, st_step=1, tol=0.005, deg=3, max_spans=400, log=None):
         if not new or len(sel) + len(new) > max_spans:
             break
         sel = sorted(set(sel + new))
-    if err > tol:
-        # the sparse fit cannot follow a sharp change: interpolate every row instead
-        # (one common knot vector for all columns, exact through the data)
+    # guard: poles must stay near the data
+    span_box = np.ptp(Y.reshape(n, -1, 3).reshape(-1, 3), axis=0).max()
+    lo = Y.reshape(-1, 3).min(0) - span_box; hi = Y.reshape(-1, 3).max(0) + span_box
+
+    def wild(P):
+        Pc = P.reshape(-1, 3)
+        return np.any(Pc < lo) or np.any(Pc > hi)
+    if err > tol or wild(P):
+        # the sparse fit cannot follow a sharp change (or it swung out between rows: a helix with a flat-ended tool
+        # square to the path, at the tube end): interpolate every row instead (one common knot vector for all
+        # columns, exact through the data)
         from scipy.interpolate import make_interp_spline
         spl = make_interp_spline(u, Y, k=deg)
         t = spl.t; P = spl.c
@@ -108,11 +116,7 @@ def column_curves(env, st_step=1, tol=0.005, deg=3, max_spans=400, log=None):
         err = 0.0
         if log:
             log("seyrek uydurma tolerans disi, tam interpolasyona gecildi")
-    # last guard: poles must stay near the data
-    span_box = np.ptp(Y.reshape(n, -1, 3).reshape(-1, 3), axis=0).max()
-    lo = Y.reshape(-1, 3).min(0) - span_box; hi = Y.reshape(-1, 3).max(0) + span_box
-    Pc = P.reshape(-1, 3)
-    if np.any(Pc < lo) or np.any(Pc > hi):
+    if wild(P):
         raise RuntimeError("sutun uydurmasi kontrolden cikti (kutup veriden cok uzak)")
     spans = len(inner) + 1
     if log:
