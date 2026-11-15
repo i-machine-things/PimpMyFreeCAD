@@ -934,7 +934,7 @@ def _add_holes(obj, sk, items, secs, tails, g, base):
         hk.strength = sk.strength if hasattr(sk, "strength") else (obj.StartStrength, obj.EndStrength)
         hk.follow = sk                                     # dis yuzeyin rehberlerini izler
         for e, (h, o_sec, nxt) in enumerate(((hsecs[0], secs[0], hsecs[1]), (hsecs[-1], secs[-1], hsecs[-2]))):
-            if (hk.t0 if e == 0 else hk.t1) != "tan":
+            if not isinstance(hk.t0 if e == 0 else hk.t1, str):       # Serbest (None) ya da Dik (vektor)
                 continue
             # teget tablosu hizalamadan (olasi flip) sonra: kesitin orneklerine gore
             o, subs = items[0 if e == 0 else -1]
