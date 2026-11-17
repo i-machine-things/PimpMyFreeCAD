@@ -17,7 +17,8 @@ import pda_railpipe as rp
 from pda_i18n import T
 
 ORIENT = ["Follow path", "World Z"]
-METHODS = ["Fast", "Exact"]
+METHODS = ["Raytraced", "Exact"]   # Raytraced: experimental (pda_bodysweep_raytraced), falls back to Exact
+LAST_NOTES = []                   # notes of the last compute (method used, fall-backs), shown in the panel
 TWIST_MAX = 360.0
 ICONS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "icons")
 
@@ -89,11 +90,14 @@ def method_prop(obj):
     """Eski dosyalar: Method ozelligi Exact ile eklenir (kayitli zarf gecerli kalir); yeni nesnede varsayilan Fast."""
     if "Method" not in obj.PropertiesList:
         obj.addProperty("App::PropertyEnumeration", "Method", "Body Sweep",
-                        "Fast: copies of the tool, plane sections and their outer boundary (seconds; sharp edges of "
-                        "the tool are slightly rounded, ~0.5 mm). Exact: exact sections and corner tracks (convex tools, "
-                        "minutes)")
+                        "Raytraced (experimental): works for most solids, falls back to Exact. Exact: exact sections and "
+                        "corner tracks (convex tools, minutes)")
         obj.Method = METHODS
         obj.Method = "Exact"
+    elif list(obj.getEnumerationsOfProperty("Method")) != METHODS:       # older file: Fast was removed
+        cur = obj.Method
+        obj.Method = METHODS
+        obj.Method = cur if cur in METHODS else "Raytraced"
     if "Offset" not in obj.PropertiesList:
         obj.addProperty("App::PropertyDistance", "Offset", "Body Sweep",
                         "Clearance: the swept volume grows by this much on every side (e.g. a channel wider than the "
@@ -105,7 +109,8 @@ def method_prop(obj):
 
 
 def params(obj):
-    return dict(method="exact" if getattr(obj, "Method", "Exact") == "Exact" else "fast",
+    m = getattr(obj, "Method", "Exact")
+    return dict(method="exact" if m == "Exact" else "raytraced",
                 orient="path" if obj.Orientation == ORIENT[0] else "z",
                 twist_deg=max(-TWIST_MAX, min(TWIST_MAX, float(obj.Twist))),
                 sec_tol=max(float(obj.Tolerance), 1e-3), fit_tol=max(float(obj.Tolerance), 1e-3))
@@ -142,9 +147,17 @@ def inputs(obj):
 def compute(tool, edges, sup, p, progress=None, cancel=None):
     """Supurulmus kati ya da hata metni (iptalde "cancelled"). Arka plan is parcaciginda da cagrilabilir."""
     p = dict(p)
-    if p.pop("method", "exact") == "fast":
-        import pda_bodysweep_fast as fs
-        return fs.run(tool, edges, sup, progress=progress, cancel=cancel, **p)
+    del LAST_NOTES[:]
+    meth = p.pop("method", "exact")
+    if meth == "raytraced":
+        r = compute_raytraced(tool, edges, p, cancel=cancel, progress=progress)
+        if not isinstance(r, str) or r == "cancelled" or (cancel is not None and cancel.is_set()):
+            return r
+        App.Console.PrintWarning("Body Sweep: the ray-traced method failed (%s); continuing with the Exact method\n" % r)
+        LAST_NOTES.append("Ray-traced failed, made with the Exact method")
+        if progress:
+            progress(T("Ray-traced failed, using the Exact method..."))
+        meth = "exact"
     import pda_bodysweep as bs
     out = bs.run(None, tool, edges, None, sup, show=False, verify=False, progress=progress, cancel=cancel, **p) or {}
     if "error" in out:
@@ -153,6 +166,61 @@ def compute(tool, edges, sup, p, progress=None, cancel=None):
     if res is None or res.isNull() or not res.Solids:
         return "Body Sweep: the sweep gave no solid"
     return res.Solids[0] if len(res.Solids) == 1 else res
+
+
+def _freecadcmd():
+    import sys
+    base = os.path.dirname(sys.executable)
+    for n in ("freecadcmd", "FreeCADCmd", "FreeCADCmd.exe", "freecadcmd.exe", "freecadcmd-python"):
+        q = os.path.join(base, n)
+        if os.path.exists(q):
+            return q
+    return None
+
+
+def compute_raytraced(tool, edges, p, cancel=None, progress=None, timeout=900):
+    """EXPERIMENTAL ray-traced sweep, in a separate freecadcmd process (a long OCC call cannot freeze the GUI, can be
+    cancelled and killed). Tries shadow caps, then fused ends, then a coarse sweep. Solid or error text."""
+    import json, shutil, subprocess, tempfile, time
+    exe = _freecadcmd()
+    if exe is None:
+        return T("Body Sweep (experimental): freecadcmd was not found next to FreeCAD's Python")
+    work = tempfile.mkdtemp(prefix="pda_rt_")
+    try:
+        tool.exportBrep(os.path.join(work, "tool.brep"))
+        Part.Compound(edges).exportBrep(os.path.join(work, "path.brep"))
+        json.dump({"twist_deg": p.get("twist_deg", 0.0), "mode": "rmf" if p.get("orient") == "path" else "zup"},
+                  open(os.path.join(work, "in.json"), "w"))
+        worker = os.path.join(os.path.dirname(os.path.abspath(__file__)), "pda_bodysweep_rt_worker.py")
+        env = dict(os.environ, PDA_RT_WORK=work)
+        proc = subprocess.Popen([exe, worker], env=env, cwd=work, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        t0 = time.time()
+        while proc.poll() is None:
+            if cancel is not None and cancel.is_set():
+                proc.kill()
+                return "cancelled"
+            if time.time() - t0 > timeout:
+                proc.kill()
+                return T("Body Sweep (experimental): time limit exceeded; the shape is outside the tool's limits")
+            if progress:
+                progress(T("Ray-traced sweep (experimental)... %d s") % (time.time() - t0))
+            time.sleep(0.3)
+        try:
+            res = json.load(open(os.path.join(work, "out.json")))
+        except Exception:
+            return T("Body Sweep (experimental): the calculation stopped without a result")
+        if not res.get("ok"):
+            if res.get("code") == "outside_limits":
+                App.Console.PrintWarning("Body Sweep (experimental): %s\n" % res.get("error", ""))
+                return T("Body Sweep (experimental): this shape is outside the tool's limits, the operation could not be completed")
+            return res.get("error") or T("Body Sweep (experimental): failed")
+        for w in res.get("warnings", []):
+            App.Console.PrintWarning("Body Sweep (experimental): %s\n" % w)
+        LAST_NOTES.append("Ray-traced: %s" % {"fast": "shadow caps", "standard": "fused ends (slower)",
+                                              "coarse": "coarse fused ends"}.get(res.get("method"), res.get("method") or "?"))
+        return Part.read(os.path.join(work, "out.brep"))
+    finally:
+        shutil.rmtree(work, ignore_errors=True)
 
 
 def is_stale(obj):
@@ -180,7 +248,7 @@ class BodySweep:
                         "Largest deviation of the envelope: smaller is more exact and slower (0.2 mm for a quick draft)")
         obj.Tolerance = 0.02
         method_prop(obj)
-        obj.Method = "Fast"
+        obj.Method = "Raytraced"
         obj.addProperty("App::PropertyLinkListGlobal", "Targets", "Body Sweep",
                         "Bodies / solids cut by the sweep (managed by the panel)")
         obj.setPropertyStatus("Targets", "ReadOnly")

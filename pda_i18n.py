@@ -45,6 +45,34 @@ def T(text):
 
 
 TR = {
+    "Body Sweep (experimental): freecadcmd was not found next to FreeCAD's Python":
+        "Gövde Süpürme (deneysel): FreeCAD'in Python'unun yanında freecadcmd bulunamadı",
+    "Ray-traced sweep (experimental)... %d s":
+        "Işın izlemeli süpürme (deneysel)... %d sn",
+    "Body Sweep (experimental): time limit exceeded; the shape is outside the tool's limits":
+        "Gövde Süpürme (deneysel): süre sınırı aşıldı; şekil aracın sınırlarının dışında",
+    "Body Sweep (experimental): the calculation stopped without a result":
+        "Gövde Süpürme (deneysel): hesap sonuç vermeden durdu",
+    "Body Sweep (experimental): this shape is outside the tool's limits, the operation could not be completed":
+        "Gövde Süpürme (deneysel): bu şekil aracın sınırlarının dışında, işlem tamamlanamadı",
+    "Body Sweep (experimental): failed":
+        "Gövde Süpürme (deneysel): başarısız",
+    "Ray-traced failed, using the Exact method...":
+        "Işın izleme başarısız, Kesin yöntem kullanılıyor...",
+    "Ray-traced failed, made with the Exact method":
+        "Işın izleme başarısız oldu, Kesin yöntemle yapıldı",
+    "Ray-traced: shadow caps":
+        "Işın izleme: gölge kapaklar",
+    "Ray-traced: fused ends (slower)":
+        "Işın izleme: birleştirilmiş uçlar (daha yavaş)",
+    "Ray-traced: coarse fused ends":
+        "Işın izleme: kaba birleştirilmiş uçlar",
+    "Ray-traced: ?":
+        "Işın izleme: ?",
+    "Ray-traced (experimental)":
+        "Işın izleme (deneysel)",
+    "Ray-traced (experimental, default): works for most solids, tries a shadow-cap method first, then slower ones, and finally the Exact method if it fails. Exact: exact sections and corner tracks (convex tools, minutes)":
+        "Işın izleme (deneysel, varsayılan): çoğu katıda çalışır; önce gölge kapak yöntemini, sonra daha yavaşlarını, hepsi başarısızsa Kesin yöntemi dener. Kesin: tam kesitler ve köşe izleri (dışbükey aletler, dakikalar)",
     "the check failed":
         "denetim başarısız",
     "STEP check":

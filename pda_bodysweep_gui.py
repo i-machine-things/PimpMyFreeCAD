@@ -115,13 +115,14 @@ class Panel(object):
         grid.addWidget(QtWidgets.QLabel(T("Method")), 4, 0)
         bf.method_prop(obj)
         self.method = QtWidgets.QComboBox()
-        for v, text in zip(bf.METHODS, (T("Fast"), T("Exact"))):
+        for v, text in zip(bf.METHODS, (T("Ray-traced (experimental)"), T("Exact"))):
             self.method.addItem(text, v)
-        self.method.setToolTip(T("Fast: copies of the tool, plane sections and their outer boundary (seconds; sharp edges "
-                                 "of the tool are slightly rounded, ~0.5 mm). Exact: exact sections and corner tracks "
-                                 "(convex tools, minutes)"))
+        self.method.setToolTip(T("Ray-traced (experimental, default): works for most solids, tries a shadow-cap method "
+                                 "first, then slower ones, and finally the Exact method if it fails. Exact: exact "
+                                 "sections and corner tracks (convex tools, minutes)"))
         self.method.setCurrentIndex(bf.METHODS.index(obj.Method))
         self.method.currentIndexChanged.connect(lambda i: self.set_prop("Method", bf.METHODS[i]))
+        self.method.currentIndexChanged.connect(lambda i: self._tol_state())
         grid.addWidget(self.method, 4, 1, 1, 2)
         grid.addWidget(QtWidgets.QLabel(T("Offset")), 5, 0)
         self.off = QtWidgets.QDoubleSpinBox()
@@ -155,6 +156,7 @@ class Panel(object):
         self.tol.setValue(float(obj.Tolerance))
         self.tol.valueChanged.connect(lambda v: self.set_prop("Tolerance", float(v)))
         grid.addWidget(self.tol, 3, 1, 1, 2)
+        self._tol_state()
         lay.addWidget(g)
         # hesap
         row = QtWidgets.QHBoxLayout()
@@ -175,6 +177,11 @@ class Panel(object):
         self.refresh()
 
     # --- durum ---
+    def _tol_state(self):
+        """Tolerance only drives the Exact method; the ray-traced method does not use it."""
+        on = bf.METHODS[self.method.currentIndex()] == "Exact"
+        self.tol.setEnabled(on)
+
     def refresh(self):
         o = self.obj
         self.tool_lbl.setText(_label(o.Tool))
@@ -309,7 +316,8 @@ class Panel(object):
         o.Pending = False
         self.apply_targets()
         self.refresh()
-        self.status.setText(T("Up to date") + " (%d s)" % (time.time() - job["t0"]))
+        self.status.setText(T("Up to date") + " (%d s)" % (time.time() - job["t0"])
+                            + "".join("\n" + T(n) for n in bf.LAST_NOTES))
         if self.after_ok:                                  # OK hesap bekliyordu: zarf artik guncel
             self.after_ok = False
             self.accept()
