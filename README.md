@@ -120,6 +120,24 @@ Limits:
 - **Collisions:** a smooth bump that runs into another part of the solid falls back to a real boolean, which takes seconds.
 - **Not available:** a peak moved off-centre with a point, and domes on curved faces.
 
+## Body Sweep / Body Sweep Cut *(experimental)*
+
+Sweeps a **solid tool** (any Body or Part solid) along a path and cuts one or more solids with the volume it sweeps, like
+SolidWorks' *Sweep Cut* with a body. Select the tool, the path (edges, a wire or a sketch) and the solids to cut, then press the
+button. A PartDesign Body gets a light *Body Sweep Cut* step, other solids a Part Cut.
+
+- **Orientation:** *Follow path* turns the tool with the path without twisting (rotation-minimizing frame, so vertical and 3D
+  paths and helices work); *World Z up* keeps it upright. **Twist** goes from -360 to 360 degrees.
+- **Method:** *Ray-traced* (default) builds the swept envelope without booleans of many copies: sections along the path, and
+  start / end caps made from the faces hidden from the first / last section plane. It also handles non-convex tools (L, T,
+  hourglass). If it fails it falls back to the exact method, so most shapes finish; if none works, a message says the shape is
+  outside the tool's limits. *Exact* is slower (minutes) and for convex tools. It runs in a separate process: FreeCAD stays
+  responsive and *Stop* ends it.
+- **Offset:** clearance. The swept volume grows by this much on every side, so a channel can be wider than the part that runs
+  through it (Round or Sharp corners; negative shrinks).
+- Experimental: rings with through-holes and very thin or odd shapes may fall back to a coarser result or fail. Cylinders, boxes
+  and hourglass-like tools are the tested cases. Needs scipy and shapely.
+
 ## Matcap
 
 The *Matcap* drop-down button shows Part and PartDesign shapes in a Clay, Plastic, Black plastic, Ceramic or Metal look, or turns
@@ -196,6 +214,15 @@ dönen katı, yüz, kenar, hacim ve sınır kutusunu raporlar. Şekiller değiş
 **Kubbe (Dome):** bir Body'nin düz yüzünü seçip düğmeye basın, *Yükseklik* verin; yüz, kenarlarda komşu yüzlere teğet bir
 kubbeye dönüşür, *Ters* katının içine oyar. Çevresi duvarsa kubbe duvarın kendi eğimiyle teğet başlar (mermi biçimi; eğimli
 Pad ve pah da olur), keskin köşeler tepeye sırt olarak gider. Fillet'li kenarda düz başlar; iç bükey çizgi ve delikli yüz de çalışır.
+
+**Body Sweep / Body Sweep Cut (deneysel):** bir katı aleti (Body ya da Part) yol boyunca süpürür ve süpürdüğü hacimle bir ya da
+birkaç katıyı keser (SolidWorks'teki gövdeli *Sweep Cut* gibi). Aleti, yolu (kenar, wire ya da sketch) ve kesilecek katıları seçip
+düğmeye basın. *Yönelim:* *Yolu izle* (burulmasız, dikey ve 3B yollar, helis çalışır) ya da *Dünya Z*; *Burulma* -360..360 derece.
+*Yöntem:* *Işın izlemeli* (varsayılan) çok kopya boolean'ı olmadan zarfı kurar; başlangıç ve bitiş kapaklarını ilk / son kesit
+düzleminden görünmeyen yüzlerden yapar, dışbükey olmayan aletlerle (L, T, kum saati) de çalışır. Başarısız olursa Tam yönteme düşer;
+hiçbiri olmazsa şeklin aracın sınırları dışında olduğunu söyler. *Tam* yöntem yavaştır (dakikalar), dışbükey aletler içindir.
+Hesap ayrı süreçte yapılır, FreeCAD donmaz, *Durdur* keser. *Ofset* boşluk verir: süpürülen hacim her yönde o kadar büyür.
+Delikli halkalar ve çok ince şekiller başarısız olabilir.
 
 **Matcap:** açılır düğmeden Part ve PartDesign şekilleri için Kil, Plastik, Siyah plastik, Seramik ya da Metal görünümünü seçin
 veya kapatın. Yalnız görünümdür, belge ve STEP değişmez; seçim yeniden başlatınca geri gelir. Nesnenin kendi rengi görünmez, seçim
