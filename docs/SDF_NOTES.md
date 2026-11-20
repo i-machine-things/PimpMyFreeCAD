@@ -39,3 +39,32 @@ Hammer solid from the shrinkwrapped CC x2 surface: valid, 1 solid, 138,773 faces
 - Weaving the SubD net from path-perpendicular slices works on the body (mean |D| 0.16 mm) but fails at curved noses/ends.
 - Star-shaped tool (sharp edges along the path) not yet tested; no crease-aware shrinkwrap.
 - Not yet integrated into the add-on; QuadWild libs are Linux-only here.
+
+## Update 2026-11-20: quad tools, raw fallback, decision
+
+**Decision: shelved.** The two existing Body Sweep methods stay; SDF is not added to the add-on for now.
+Reason: a good quad surface needs an external program, and the gain is coverage only (shapes the other
+methods reject, e.g. the hammer), not speed or quality. Revisit if users report shapes that fail.
+
+Findings:
+- **QuadWild dropped.** Its cages caused the teeth / waviness near the path end; the raw SDF mesh does not have them.
+- **AutoRemesher 1.2.0** (MIT, CLI, Linux AppImage; needs an X display, no Qt offscreen plugin) on the raw hammer SDF,
+  then Catmull-Clark x2 + shrinkwrap onto the whole surface (field smoothed sigma 0.5 voxel):
+
+  | AutoRemesher setting | cage quads | mean / max dist. to SDF | wave p99 | dihedral p99 | volume |
+  |---|---|---|---|---|---|
+  | QuadWild s2 (for reference) | 5298 | 0.042 / 0.48 mm | 0.277 | 24.2 deg | -0.64 % |
+  | target 22180, edge scaling 1.86 | 3174 | 0.043 / 0.42 mm | 0.189 | 24.0 deg | -0.39 % |
+  | target 22180, edge scaling 1.20 | 7572 | 0.048 / 0.47 mm | 0.084 | 16.7 deg | -0.36 % |
+  | target 40000, edge scaling 1.20 | 11196 | 0.050 / 0.44 mm | 0.060 | 14.7 deg | -0.36 % |
+
+  Remesh 6-12 s. Shrinkwrap the **whole** surface, not only a repair zone (zone-only wrap raised roughness).
+  HC Laplacian / bilateral smoothing with a sharp-edge mask added little.
+- **Raw SDF triangle mesh -> solid, no quads, no external tool:** works. Hammer, 54,628 triangles: shape 10.7 s,
+  solid 87 s (valid), box cut 19 s (valid); volume about -4.5 % (coarse field), faceted surface.
+- **Solid from the AutoRemesher CC x1 surface** (60,636 triangles): valid, cut valid, clean, but the mesh -> B-rep
+  step took 757 s (the raw mesh of similar size: 11 s). Not caused by degenerate triangles; cause unknown.
+  CC x2 (242k triangles) did not finish. Idea if revisited: one bicubic B-spline face per regular cage quad
+  (Catmull-Clark limit surface) instead of triangles.
+- FreeCAD geometry calls in a Python thread still block the GUI; run heavy steps in a separate FreeCADCmd process.
+- NeurCross (AGPL-3.0, PyTorch, outputs only a cross field, ~11 min per shape) is not usable here.
