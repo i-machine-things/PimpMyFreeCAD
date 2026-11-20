@@ -69,6 +69,8 @@ TR = {
         "Işın izleme: kaba birleştirilmiş uçlar",
     "Ray-traced: ?":
         "Işın izleme: ?",
+    "Experimental tool":
+        "Deneysel araçtır",
     "Ray-traced (experimental)":
         "Işın izleme (deneysel)",
     "Ray-traced (experimental, default): works for most solids, tries a shadow-cap method first, then slower ones, and finally the Exact method if it fails. Exact: exact sections and corner tracks (convex tools, minutes)":

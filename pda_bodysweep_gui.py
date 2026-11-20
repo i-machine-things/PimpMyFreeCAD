@@ -51,6 +51,10 @@ class Panel(object):
         self.form = w = QtWidgets.QWidget()
         w.setWindowTitle(T("Body Sweep"))
         lay = QtWidgets.QVBoxLayout(w)
+        warn = QtWidgets.QLabel(T("Experimental tool"))   # deneysel arac uyarisi, baslik altinda
+        warn.setStyleSheet("color: #ff8c1a; font-weight: bold; font-size: 13pt;")
+        warn.setAlignment(QtCore.Qt.AlignCenter)
+        lay.addWidget(warn)
         # girdiler
         g = QtWidgets.QGroupBox(T("Tool and path"))
         grid = QtWidgets.QGridLayout(g)
