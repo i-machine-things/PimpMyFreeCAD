@@ -487,12 +487,23 @@ def _build_impl(tool, path, twist_deg=0.0, mode="rmf", clearance=0.0, fuse_ends=
         for fz in ((0.0, 1e-3, 1e-2) if ends else ()):
             try:
                 f = cage.fuse(ends, fz) if fz else cage.fuse(ends)
-            except Exception:
+            except Exception as ex_:
+                info["warnings"].append("fusing the end pieces (fuzz %g) raised: %s" % (fz, str(ex_)[:80]))
                 continue
             if f.isValid() and len(f.Solids) == 1:
                 fu = f
                 break
             fu = fu or f
+        if fu is None and ends:             # every all-at-once fuse raised: try piece by piece
+            try:
+                f = cage
+                for pc in ends:
+                    f = f.fuse(pc, 1e-3)
+                fu = f
+            except Exception as ex_:
+                info["warnings"].append("fusing the end pieces one by one raised: %s" % str(ex_)[:80])
+        if fu is None:
+            raise RuntimeError("the end pieces could not be fused onto the cage (%s)" % "; ".join(info["warnings"][-3:]))
         try:
             rs = fu.removeSplitter()
             if rs.isValid() and abs(rs.Volume - fu.Volume) < 1e-4 * fu.Volume:
@@ -704,7 +715,6 @@ def _cage_solid(rows, tmpl2, sharp, nT, size, info, cap_faces=None):
             allf = JoinAPI.connect(allf, tolerance=2e-3 * size).Faces
         except Exception as ex:
             info["warnings"].append("face connect failed: %s" % ex)
-        info['debug_faces'] = (allf, len(cap_faces))
         shell = Part.Shell(allf)
     else:
         shell = Part.Shell([Part.Face(sf) for sf in faces] + [capface(True), capface(False)])
