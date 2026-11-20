@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **SDF coarse method research (not in the add-on yet):** prototype of a last-resort Body Sweep tier (swept signed distance field -> gap closing -> QuadWild quad cage -> Catmull-Clark -> shrinkwrap onto the field -> solid -> cut). It handled the hammer tool that all ray-traced / exact methods reject; timings and limits in `docs/SDF_NOTES.md`, scripts in `prototypes/sdf/`.
+
 - **Body Sweep is merged into main (experimental).** The default method is now **Ray-traced** (shadow caps, fall-back chain
   Ray-traced -> Exact, runs in a separate process, Stop ends it); the old *Fast* method was removed and old files map to
   Ray-traced. Entries below describe how it was built; where they say "not yet in the GUI" or "Fast (default)" they are out of date.
