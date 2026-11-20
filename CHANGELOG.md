@@ -1,61 +1,37 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 (2026-11-20)
 
-- **Magic Loft / Rail Pipe: handles could not be grabbed in a tall 3D view.** When the 3D view is taller than wide (wide task panel, portrait screen) the handles were hit-tested ~10 % off from where they are drawn, so the seam (connector) points and guide handles did not react. Screen projection now matches Coin's rendering.
+### New: Body Sweep / Body Sweep Cut *(experimental)*
 
-- **Body Sweep (ray-traced):** when fusing the start / end pieces onto the cage raises, the error is now reported in the warnings, the pieces are tried one by one, and a clear error is raised instead of continuing with nothing; removed a leftover debug field.
+- Sweeps a **solid tool** (any Body or Part solid) along a path and cuts one or more solids with the swept volume, like
+  SolidWorks' *Sweep Cut* with a body. A PartDesign Body gets a light *Body Sweep Cut* step, other solids a Part Cut.
+- **Orientation:** *Follow path* (rotation-minimizing frame; vertical and 3D paths and helices work) or *World Z up*,
+  optional support face. **Twist** -360..360 degrees. **Offset** (clearance, Round or Sharp corners, negative shrinks).
+- **Method:** *Ray-traced* (default) builds the swept envelope from sections along the path with start / end caps made of
+  the faces hidden from the first / last section plane, without booleans of many copies. It also handles non-convex tools
+  (L, T, hammer, hourglass). If it fails it falls back to *Exact* (convex tools, slower); if nothing works a message says
+  the shape is outside the tool's limits.
+- Runs in a separate process: FreeCAD stays responsive, progress in the panel, *Stop* ends it. A recompute only cuts unless
+  the inputs changed. The panel shows an *Experimental tool* notice.
+- Test bench `tests/fc_bodysweep_raytraced.py` (inside FreeCAD): 8 tools, 180 degree twist, 0 folds, valid solids and cuts,
+  tool at most 0.13-0.45 mm outside the sweep.
+- Needs **scipy** and **shapely** in FreeCAD's Python.
+- Research on an SDF-based coarse method is documented in `docs/SDF_NOTES.md` (prototype only, not in the add-on).
 
-- **SDF coarse method research (not in the add-on yet):** prototype of a last-resort Body Sweep tier (swept signed distance field -> gap closing -> QuadWild quad cage -> Catmull-Clark -> shrinkwrap onto the field -> solid -> cut). It handled the hammer tool that all ray-traced / exact methods reject; timings and limits in `docs/SDF_NOTES.md`, scripts in `prototypes/sdf/`.
+### Magic Loft
 
-- **Body Sweep is merged into main (experimental).** The default method is now **Ray-traced** (shadow caps, fall-back chain
-  Ray-traced -> Exact, runs in a separate process, Stop ends it); the old *Fast* method was removed and old files map to
-  Ray-traced. Entries below describe how it was built; where they say "not yet in the GUI" or "Fast (default)" they are out of date.
-  README now has a Body Sweep section.
+- Profiles with **holes** loft hollow: inner wires of a face and sketch Make Internals are lofted as holes and cut out, like
+  Rail Pipe. All profiles must have the same number of holes; end constraints and guides also apply to the hole walls.
+- Edit panel **Undo / Redo** (Ctrl+Z, Ctrl+Shift+Z / Ctrl+Y or the panel buttons) for guide points, connectors, constraints,
+  profile and guide lists and options.
 
-- **Ray-Traced Body Sweep** (Işın İzlemeli Body Sweep, `pda_bodysweep_raytraced.py`, branch `body-sweep`, not yet in the
-  GUI): a new envelope method that also handles **non-convex** tools (L, T, hammer, hourglass) and twist.
-  The tool silhouette along the path gives a template loop with a fixed point count (sharp corners become creases,
-  with two extra columns at +/- eps). Every section plane is cut by the tool copies that cross it and the 2D union
-  (shapely) is the section. Each template point is mapped into every section by a ray along the template normal,
-  smoothed over +/- R so rays never cross before the shift caused by rotation / twist (R is set from the twist and the
-  path curvature); the outermost hit is taken, predicted with the frame of the body centred on the plane. The quad
-  cage gives one B-spline surface per strip between creases (interpolating across, SubD-like control net along the
-  path); planar caps close it, and only the parts of the start / end bodies that stick out of the cage are fused on
-  (exact fuse first - the fuzzy fuse was seen to drop parts of the end body). Follow path (RMF) or Z up, twist,
-  clearance. Test bench `tests/fc_bodysweep_raytraced.py` (inside FreeCAD): 8 tools (filleted box, cola lying /
-  twisted, L, D, T, hammer, hourglass), 180 degree twist: 0 folds, valid solids and cuts, tool at most 0.13-0.45 mm
-  outside the sweep, 3-9 s each. Usage: select tool, path, solids to cut, then
-  `import pda_bodysweep_raytraced as rbs; rbs.run_selection(twist_deg=0, mode="rmf", clearance=0)`.
-- **Body Sweep** (work in progress, branch `body-sweep`): sweep a solid tool (any Body / Part solid) along a path and
-  cut one or more Bodies with the swept volume. One Body Sweep object holds the envelope; every PartDesign Body to cut
-  gets a light Body Sweep Cut step, other solids a Part Cut. Toolbar command + task panel: tool, path, bodies to cut,
-  **Orientation** (Follow path: rotation-minimizing frame, also on vertical / 3D paths and helices; World Z up;
-  optional support face), **Twist** -360..360 degrees, **Tolerance** (0.2 mm for a quick draft).
-  **Method**: Fast (default) - the tool as a mesh copied densely along the path into one mesh, plane sections
-  perpendicular to the path (linear density ramp at both ends), only the outermost points of every section (rays from
-  its centre), a smooth B-spline loft: seconds (cola 180 degree twist: 29 s vs 118 s, -0.19 %; chamfered box 3D path
-  90 degree twist: 8 s vs 19 s, -0.47 %); sharp tool edges are rounded by ~0.3-0.6 mm and a section must be star
-  shaped about its centre. Exact - the exact-section envelope (convex tools).
-  **Offset** (clearance): the tool is offset before the sweep (the sweep of an offset is the offset of the sweep),
-  so a channel is wider than the part running through it by exactly that much; Round or Sharp corners, negative
-  shrinks.
-  The envelope is computed in a background thread (FreeCAD stays responsive, progress in the panel, Stop) and stored
-  in the object; a recompute only cuts, unless the inputs changed. Convex tools only for now. Needs scipy and shapely.
-  The swept envelope is built directly from exact sections perpendicular to the path (no boolean of many copies),
-  computed in parallel threads (cola test 213 s -> 118 s); the tube end caps are glued with a 0.05 mm fuzzy fuse.
-  A section now only looks at poses near its station: on a helix the plane also cut the turns above and below
-  (80 mm misfits, column fit failed; 25 s -> 1 s on a test helix). A column fit whose poles swing out falls back to
-  full interpolation. FreeCAD-free core test: `python3 tests/smoke_bodysweep_core.py`.
-- Fixed `TypeError: int() argument must be ... not 'StandardButton'` in the Rail Pipe, Magic Loft and Dome task panels on
-  newer PySide6 (FreeCAD 27.x), where `QDialogButtonBox.Ok` is an enum object instead of an int (issue #2).
-- Magic Loft / Magic Loft Cut profiles with **holes** gave a filled solid. Now the inner wires of a face (e.g. the ring face
-  of a hollow part) and sketch Make Internals are lofted as holes and cut out, like Rail Pipe. All profiles must have the
-  same number of holes; end constraints (Normal / Tangent) also apply to the hole walls, and the hole walls follow the guides
-  (selected or automatic), so the wall thickness stays the same. The preview shows the holes too.
-- Magic Loft edit panel: **Undo / Redo** of the edits made in the panel (guide points, connectors, constraints, profile and
-  guide lists, options) with Ctrl+Z and Ctrl+Shift+Z / Ctrl+Y or the panel buttons. FreeCAD's own Undo doesn't work while
-  the panel is open; its shortcuts are taken over until the panel closes.
+### Fixes
+
+- Magic Loft / Rail Pipe: handles (seam connectors, guide points) could not be grabbed when the 3D view is taller than wide
+  (wide task panel, portrait screen); they were hit-tested ~10 % away from where they are drawn.
+- `TypeError: int() argument must be ... not 'StandardButton'` in the Rail Pipe, Magic Loft and Dome task panels on newer
+  PySide6 (FreeCAD 27.x) (issue #2).
 
 ## 0.3.0 (2026-11-06)
 

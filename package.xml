@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8" standalone="no" ?>
 <package format="1" xmlns="https://wiki.freecad.org/Package_Metadata">
   <name>Pimp My FreeCAD</name>
-  <description>Extra modeling tools for PartDesign and Part. Rail Pipe / Rail Groove: sweep a flat face or closed sketch along a guide curve to a second profile or a free end, added to or cut out of the Body; edit the guide on screen with a Move gizmo, cable-like neighbours and the native PartDesign preview. Magic Loft / Magic Loft Cut: a clean loft through closed profiles with selected or automatic guides. Dome: raise a flat face into a cap tangent to its neighbouring faces.</description>
-  <version>0.3.0</version>
-  <date>2026-11-06</date>
+  <description>Extra modeling tools for PartDesign and Part. Rail Pipe / Rail Groove: sweep a flat face or closed sketch along a guide curve to a second profile or a free end, added to or cut out of the Body; edit the guide on screen with a Move gizmo, cable-like neighbours and the native PartDesign preview. Magic Loft / Magic Loft Cut: a clean loft through closed profiles with selected or automatic guides. Dome: raise a flat face into a cap tangent to its neighbouring faces. Body Sweep / Body Sweep Cut (experimental): sweep a solid tool along a path and cut solids with the swept volume.</description>
+  <version>0.4.0</version>
+  <date>2026-11-20</date>
   <maintainer email="sedatkuran@gmail.com">sedatkrn</maintainer>
   <license file="LICENSE">MIT</license>
   <url type="repository" branch="main">https://github.com/sedatkrn/PimpMyFreeCAD</url>
