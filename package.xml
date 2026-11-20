@@ -18,13 +18,17 @@
   <tag>pipe</tag>
   <tag>groove</tag>
   <tag>guide curve</tag>
+  <tag>body sweep</tag>
+  <depend type="python">numpy</depend>
+  <depend type="python">scipy</depend>
+  <depend type="python">shapely</depend>
   <content>
     <workbench>
       <name>Pimp My FreeCAD</name>
       <classname>PimpMyPartDesignWorkbench</classname>
       <icon>icons/pda_addins.svg</icon>
       <subdirectory>./</subdirectory>
-      <description>Rail Pipe / Rail Groove, Magic Loft, Dome; the tools also appear in the toolbars of PartDesign and Part.</description>
+      <description>Rail Pipe / Rail Groove, Magic Loft, Dome, Body Sweep (experimental); the tools also appear in the toolbars of PartDesign and Part.</description>
       <freecadmin>1.0.0</freecadmin>
     </workbench>
   </content>
