@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **Magic Loft / Rail Pipe: handles could not be grabbed in a tall 3D view.** When the 3D view is taller than wide (wide task panel, portrait screen) the handles were hit-tested ~10 % off from where they are drawn, so the seam (connector) points and guide handles did not react. Screen projection now matches Coin's rendering.
+
 - **Body Sweep (ray-traced):** when fusing the start / end pieces onto the cage raises, the error is now reported in the warnings, the pieces are tried one by one, and a clear error is raised instead of continuing with nothing; removed a leftover debug field.
 
 - **SDF coarse method research (not in the add-on yet):** prototype of a last-resort Body Sweep tier (swept signed distance field -> gap closing -> QuadWild quad cage -> Catmull-Clark -> shrinkwrap onto the field -> solid -> cut). It handled the hammer tool that all ray-traced / exact methods reject; timings and limits in `docs/SDF_NOTES.md`, scripts in `prototypes/sdf/`.

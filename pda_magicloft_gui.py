@@ -503,7 +503,7 @@ class Editor(object):
 
     # --- fare ---
     def _screen(self, p):
-        return self.view.getPointOnViewport(self.world(p))
+        return sm.screen_point(self.view, self.world(p))
 
     @staticmethod
     def _dist(s, pos):

@@ -15,6 +15,7 @@ import FreeCADGui as Gui
 from pivy import coin
 from PySide import QtCore, QtWidgets
 
+import pda_common as sm
 import pda_railpipe as rp
 from pda_i18n import T
 
@@ -228,7 +229,7 @@ class Editor(object):
     def pick(self, pos, N, radius=12.0):
         best = None
         for j, p in enumerate(N):
-            s = self.view.getPointOnViewport(self.world(p))
+            s = sm.screen_point(self.view, self.world(p))
             d = ((s[0] - pos[0]) ** 2 + (s[1] - pos[1]) ** 2) ** 0.5
             if d < radius and (best is None or d < best[0]):
                 best = (d, j)
@@ -238,7 +239,8 @@ class Editor(object):
         """Imlecin altindaki egri parcasi: (parca sirasi, en yakin noktanin parametresi) ya da None."""
         if not getattr(self, "curve", None):
             return None
-        S = [self.view.getPointOnViewport(w) for u, w in self.curve]
+        vv, W, H = sm._vv(self.view)
+        S = [sm._to_screen(vv, W, H, w) for u, w in self.curve]
         best = None
         for k in range(len(S) - 1):
             ax, ay = S[k][0], S[k][1]

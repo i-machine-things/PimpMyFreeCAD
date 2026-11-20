@@ -59,8 +59,15 @@ def _left_held():
     return bool(QtWidgets.QApplication.mouseButtons() & QtCore.Qt.LeftButton)
 
 def _vv(v):
+    """Ekrana izdusum icin gorus hacmi. Gorunum genisliginden uzunsa (en/boy < 1) Coin cizerken hacmi 1/oran kadar
+    buyutur (ADJUST_CAMERA); getViewVolume ve FreeCAD'in getPointOnViewport'u bunu yapmiyor, tutamaklar cizildigi
+    yerden ~%10 kayik yakalaniyordu (dar 3B gorunum, genis gorev paneli)."""
     W, H = v.getSize()
-    return v.getCameraNode().getViewVolume(float(W) / H), W, H
+    a = float(W) / H
+    vv = v.getCameraNode().getViewVolume(a)
+    if a < 1.0:
+        vv.scale(1.0 / a)
+    return vv, W, H
 
 class _Handle(object):
     """Tek bir tutamak: renk/kalinlik dugumleri (vurgu icin) + cizim."""
@@ -241,6 +248,12 @@ def _ray(v, pos):
 def _to_screen(vv, W, H, p):
     sx, sy, _ = vv.projectToScreen(coin.SbVec3f(p.x, p.y, p.z)).getValue()
     return sx * W, sy * H
+
+
+def screen_point(v, p):
+    """Dunya noktasinin piksel konumu (sol alt kokenli, fare olayi ile ayni); getPointOnViewport yerine."""
+    vv, W, H = _vv(v)
+    return _to_screen(vv, W, H, p)
 
 
 def _seg_dist(px, py, a, b):
