@@ -1,6 +1,20 @@
 # Changelog
 
-## Unreleased
+## 0.4.1 (2026-11-22)
+
+### Matcap
+
+- **Matcap with FreeCAD lights** (new check button next to Matcap): the matcap is lit by FreeCAD's headlight, backlight
+  and fill light (direction, colour, intensity, on / off) instead of its own studio light; the material's base colour,
+  shine, rim and AO are kept. A change in the light preferences rebuilds the texture at once. Zebra, Metal and Draft
+  analysis are not affected.
+
+### Tree
+
+- Inputs are nested under the feature in the tree, like Pad / Loft: Magic Loft's profiles and selected guides, Body
+  Sweep's path (and support face binder), and Rail Pipe's profiles now also in the Part workbench. Only sketches, 2D
+  objects and binders in the same Body (or outside any Body for Part features) are claimed; a solid's face and the swept
+  tool Body stay where they are.
 
 ### Magic Loft
 
