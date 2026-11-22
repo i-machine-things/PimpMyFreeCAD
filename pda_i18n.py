@@ -431,6 +431,10 @@ TR = {
         'Kılavuz',
     'Move neighbors':
         'Komşular da gelsin',
+    'Mirror move':
+        'Simetrik taşı',
+    'Two selected points move symmetrically. The first selected point is the base: the other snaps to its mirror about the loft axis, perpendicular to the view. Rotating the view turns it off':
+        'Seçili iki nokta simetrik hareket eder. İlk seçilen nokta bazdır: öteki, bakışa dik ve loft ekseninden geçen düzleme göre onun aynasına oturur. Görünüm döndürülünce kapanır',
     'Options':
         'Seçenekler',
     'Shell (hollow pipe, open ends)':

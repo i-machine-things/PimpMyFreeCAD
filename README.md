@@ -68,7 +68,10 @@ It builds one low-pole surface instead of a dense sweep: fast, and made to take 
   solid's face starts as Normal, a sketch end as Free.
 - **Edit on screen:** double-click the feature (the panel also opens right after creating one). Move the yellow points
   of the automatic guides with the Move gizmo, add and delete points, use *Move neighbors* (one point at a time).
-  Ctrl+click selects several points, which move and delete together. Drag the green **connector** dots to fix a twist;
+  Ctrl+click selects several points, which move and delete together. **Mirror move** (two points selected): the first
+  selected point is the base, the other snaps to its mirror about the loft axis in a plane perpendicular to the view, and
+  from then on they move symmetrically; changing the selection or rotating the view turns it off. After a move the points
+  of a guide are spread along it by their distances (chord length), so symmetric points give symmetric guides. Drag the green **connector** dots to fix a twist;
   they snap to edge ends and midpoints (hidden with selected guides, which set the matching themselves). While dragging you see a
   light mesh; on release the real surface; *Zebra* shows reflection stripes on it. The solid is computed on **OK**.
 - **Guide influence:** how far a guide acts sideways. A larger value lifts a broader area instead of a narrow ridge
@@ -201,7 +204,9 @@ tıklayıp *Nokta ekle* ile tam tıkladığınız yere nokta koyun, *Komşular d
 **Sihirli Loft (Magic Loft) / Sihirli Loft Oyma:** iki ya da daha fazla kapalı profil seçin (düz yüz, kapalı sketch,
 Binder, düzlemsel olmayabilen kapalı kenar halkası); seçimdeki açık eğriler rehber olur. *Hazır rehber çiz* açıkken
 otomatik rehberler oluşur ve ekranda düzenlenir, seçili rehberler saklanır ama kullanılmaz. Uçlar *Serbest*, *Profile
-dik* ya da *Yüzeye teğet* olabilir. Yeşil connector noktaları burulmayı düzeltir, *Zebra* yüzey kalitesini gösterir.
+dik* ya da *Yüzeye teğet* olabilir. Yeşil connector noktaları burulmayı düzeltir, *Zebra* yüzey kalitesini gösterir. İki nokta seçiliyken *Simetrik taşı*: ilk seçilen
+nokta bazdır, öteki bakışa dik ve loft ekseninden geçen düzleme göre onun aynasına oturur, sonra ikisi simetrik hareket eder;
+seçim değişince ya da görünüm döndürülünce kapanır.
 Köşeliden yuvarlağa geçişte PartDesign Thickness et vermez; içini Sihirli Loft Oyma ile boşaltın.
 
 **Kesit yumuşatma:** doğru-yay birleşimi teğettir ama eğriliği bir anda değişir; tek parça yüzey orada dalgalanır (Zebra'da şeritlerde

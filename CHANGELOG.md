@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Magic Loft
+
+- **Symmetric guides fixed:** a guide point kept the position along the loft (v) where it was first clicked, so two
+  mirror-image points could sit at different v and give non-matching guides (14.7 mm apart in a test). After a drag or a
+  typed X / Y / Z the points of a guide are spread by their distances (chord length); absolute positions are kept.
+- **Mirror move** for two selected points: the first selected point is the base, the other snaps to its mirror about the
+  loft axis in a plane perpendicular to the view (snapped to a global axis within 10 degrees), then they move
+  symmetrically. Turned off when the selection changes or the view is rotated.
+
 ## 0.4.0 (2026-11-20)
 
 ### New: Body Sweep / Body Sweep Cut *(experimental)*

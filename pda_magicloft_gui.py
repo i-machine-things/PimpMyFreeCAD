@@ -9,6 +9,7 @@
 # Kati OK'e basinca hesaplanir; OK degisiklikleri tek geri alma adimi olarak birakir, Cancel geri alir. Duzenleme
 # sirasinda Ctrl+Z / Ctrl+Shift+Z (Ctrl+Y) duzenleyicinin kendi adimlarini geri alir / yineler (FreeCAD'in Undo'su acik
 # islemde calismiyor; kisayollari duzenleme boyunca devralinir).
+import math
 import numpy as np
 
 import FreeCAD as App
@@ -94,6 +95,10 @@ class Editor(object):
         self.span = None                                   # secili rehber yeri: (rehber, v)
         self.drag = None
         self.cable, self.elastic = False, 0.1
+        self.mirror = False                                # iki secili nokta bakis duzlemine dik aynaya gore simetrik
+        self.mirror_plane = None                           # (normal, nokta) yerel; tik atildiginda bir kez
+        self.mirror_cam = None                             # tik anindaki kamera yonu: donerse simetri kapanir
+        self.order = []                                    # secim sirasi (surukleme sirayi bozmaz): ilk = baz nokta
         self.show_preview = sm._param().GetBool("MagicLoftPreview", True)
         self.zebra = sm._param().GetBool("MagicLoftZebra", False)
         self.error = None
@@ -131,6 +136,7 @@ class Editor(object):
         self.parent.addChild(self.gizmo.root)
         self.zoom = QtCore.QTimer()
         self.zoom.timeout.connect(self.gizmo.update_scale)
+        self.zoom.timeout.connect(self._watch_view)
         self.zoom.start(50)
         self._preview_on()
         self.cb_btn = self.view.addEventCallbackPivy(coin.SoMouseButtonEvent.getClassTypeId(), self.on_btn)
@@ -633,6 +639,7 @@ class Editor(object):
         if g is None:
             return
         if self.auto_mode():
+            ml.reparam_auto(self.skin)                     # v: nokta arasi uzakliga gore (simetrik noktaya simetrik egri)
             ml.set_auto(self.obj, self.skin.auto)
         self.redraw()
         self.show_real()
@@ -687,12 +694,91 @@ class Editor(object):
         data = [[(v, np.array(o)) for v, o in pts] for pts in g["auto0"]]
         if self.cable and len(self.picked) < 2:
             self._cable(data, g["j"], g["k"], d)
+        elif self.mirror and len(self.picked) == 2 and self.mirror_plane is not None:
+            n = self.mirror_plane[0]
+            for j, k in self.picked:
+                dd = d if (j, k) == (g["j"], g["k"]) else d - 2.0 * d.dot(n) * n
+                data[j][k] = (data[j][k][0], data[j][k][1] + dd)
         else:
             for j, k in self.picked:
                 data[j][k] = (data[j][k][0], data[j][k][1] + d)
         sk.auto = data
         self.redraw()
         self.panel.sync()
+
+    def sync_order(self):
+        """Secim sirasi: secimden cikanlar duser, yeniler sona eklenir (surukleme picked'i yeniden siralar, bunu degil)."""
+        self.order = [k for k in self.order if k in self.picked] + [k for k in self.picked if k not in self.order]
+
+    def _abs(self, j, k):
+        sk = self.skin
+        v, off = sk.auto[j][k]
+        return sk.base(sk.us[j:j + 1], np.array([v]))[0, 0] + np.asarray(off, float)
+
+    def _cam(self):
+        try:
+            return self.view.getCameraOrientation()
+        except Exception:
+            return None
+
+    def mirror_off(self):
+        self.mirror, self.mirror_plane, self.mirror_cam = False, None, None
+        self.panel.set_mirror_box(False)
+
+    def set_mirror(self, on):
+        """Tik: ilk secilen nokta baz; obur nokta bakistaki simetri duzlemine gore onun aynasina oturur. Duzlem ekrana dik,
+        loftun ekseninden (ilk -> son kesit merkezi) gecer; eksen bakisa paralelse iki noktanin ortasindan. Bir eksene
+        10 dereceden yakin normal o eksene oturur."""
+        if not on:
+            self.mirror_off()
+            return
+        self.sync_order()
+        if not self.auto_mode() or len(self.picked) != 2:
+            self.mirror_off()
+            return
+        sk = self.skin
+        (jb, kb), (jo, ko) = self.order[0], self.order[1]
+        pb, po = self._abs(jb, kb), self._abs(jo, ko)
+        vd = np.array(tuple(self.local_dir(self.view_dir())))
+        vd /= max(np.linalg.norm(vd), 1e-12)
+        axis = sk.secs[-1].c - sk.secs[0].c
+        n = np.cross(vd, axis)
+        p0 = np.mean([s.c for s in sk.secs], axis=0)
+        if np.linalg.norm(n) < 1e-6 * max(np.linalg.norm(axis), 1e-9):
+            w = po - pb
+            n = w - w.dot(vd) * vd
+            p0 = (pb + po) / 2
+        L = np.linalg.norm(n)
+        if L < 1e-9:
+            self.mirror_off()
+            return
+        n = n / L
+        a = int(np.argmax(np.abs(n)))
+        if abs(n[a]) > math.cos(math.radians(10.0)):
+            n = np.zeros(3)
+            n[a] = 1.0
+        self.mirror, self.mirror_plane, self.mirror_cam = True, (n, p0), self._cam()
+        r = pb - 2.0 * (pb - p0).dot(n) * n                # bazin aynasi
+        v = sk.auto[jo][ko][0]
+        sk.auto[jo][ko] = (v, r - sk.base(sk.us[jo:jo + 1], np.array([v]))[0, 0])
+        ml.reparam_auto(sk)
+        ml.set_auto(self.obj, sk.auto)
+        self.redraw()
+        self.show_real()
+        self.panel.sync()
+
+    def _watch_view(self):
+        if not self.mirror or self.mirror_cam is None or self.drag is not None:
+            return
+        c = self._cam()
+        if c is None:
+            return
+        try:
+            ang = (c.inverted() * self.mirror_cam).Angle if hasattr(c, "inverted") else (c.inverse() * self.mirror_cam).Angle
+        except Exception:
+            return
+        if abs(ang) > math.radians(0.5):
+            self.mirror_off()
 
     def _cable(self, data, j, k, d):
         """Kablo: noktanin kesit araligindaki dugumler pda_common.rail_cable ile; kesitler sabit."""
@@ -725,6 +811,8 @@ class Editor(object):
             return
         g = dict(j=cur[0][0], k=cur[0][1], auto0=self._copy_auto())
         self.move_to(g, np.array(tuple(self.local_dir(t - w))))
+        ml.reparam_auto(self.skin)
+        self.redraw()
         ml.set_auto(self.obj, self.skin.auto)
         self.show_real()
 
@@ -935,6 +1023,12 @@ class Panel(object):
         self.elastic.setValue(ed.elastic)
         self.elastic.valueChanged.connect(lambda v: setattr(self.ed, "elastic", float(v)))
         grid.addWidget(self.elastic, 5, 1)
+        self.mirror = QtWidgets.QCheckBox(T("Mirror move"))
+        self.mirror.setToolTip(T("Two selected points move symmetrically. The first selected point is the base: the "
+                                 "other snaps to its mirror about the loft axis, perpendicular to the view. "
+                                 "Rotating the view turns it off"))
+        self.mirror.toggled.connect(lambda on: self.ed.set_mirror(bool(on)))
+        grid.addWidget(self.mirror, 6, 0, 1, 2)
         lay.addWidget(g)
         # secenekler
         import pda_commands
@@ -1059,6 +1153,12 @@ class Panel(object):
             del items[i]
             self._set("Guides", items)
 
+    def set_mirror_box(self, on):
+        if self.mirror.isChecked() != bool(on):
+            self.mirror.blockSignals(True)
+            self.mirror.setChecked(bool(on))
+            self.mirror.blockSignals(False)
+
     def sync(self):
         ed = self.ed
         self.b_undo.setEnabled(len(getattr(ed, "hist", [])) > 1)
@@ -1071,6 +1171,11 @@ class Panel(object):
             x.setEnabled(not auto)
         self.point_box.setEnabled(auto)
         self.cable.setEnabled(len(ed.picked) < 2)          # kablo tek noktada; birden coksu birlikte tasinir
+        ed.sync_order()
+        self.mirror.setEnabled(len(ed.picked) == 2)
+        if ed.mirror and len(ed.picked) != 2:              # secim degisti: simetri kapanir
+            ed.mirror, ed.mirror_plane, ed.mirror_cam = False, None, None
+        self.set_mirror_box(ed.mirror)
         cur =[n for n in getattr(ed, "N", []) if ed.sel == (n[0], n[1]) and n[1] is not None]
         for k, b in enumerate(self.xyz):
             b.setEnabled(bool(cur))

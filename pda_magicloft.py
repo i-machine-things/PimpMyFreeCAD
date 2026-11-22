@@ -820,6 +820,35 @@ def default_auto(vn, n):
     return [[(float((a + b) / 2), np.zeros(3)) for a, b in zip(vn, vn[1:])] for _ in range(n)]
 
 
+def reparam_auto(sk):
+    """Otomatik rehber noktalarinin v'si kesit araligi icinde nokta-arasi uzakliga (chord-length) gore yeniden dagitilir;
+    mutlak konum korunur, ofset yeni v'ye gore yeniden hesaplanir. v eklenirken tiklanan yerde donuk kaliyordu: simetrik
+    noktalar farkli v'de kalip simetrik raylari 14.7 mm ayirdi. Siralama (nokta indeksleri) korunur."""
+    if not sk.auto:
+        return
+    for j in range(min(len(sk.auto), len(sk.us))):
+        pts = sk.auto[j]
+        new = list(pts)
+        for a, b in zip(sk.vn, sk.vn[1:]):
+            idx = sorted([k for k, p in enumerate(pts) if a < p[0] < b], key=lambda k: pts[k][0])
+            if not idx:
+                continue
+            vs = np.array([a] + [pts[k][0] for k in idx] + [b])
+            G = sk.base(sk.us[j:j + 1], vs)[0]
+            A = G.copy()
+            A[1:-1] += np.array([np.asarray(pts[k][1], float) for k in idx])
+            L = np.concatenate([[0.0], np.cumsum(np.linalg.norm(np.diff(A, axis=0), axis=1))])
+            if L[-1] < 1e-9:
+                continue
+            nv = a + (b - a) * L[1:-1] / L[-1]
+            if np.any(np.diff(np.concatenate([[a], nv, [b]])) < 1e-4):   # ust uste nokta: dokunma
+                continue
+            Gn = sk.base(sk.us[j:j + 1], nv)[0]
+            for n, k in enumerate(idx):
+                new[k] = (float(nv[n]), A[n + 1] - Gn[n])
+        sk.auto[j] = new
+
+
 def prepare(obj):
     """Nesneden Skin (profiller okunur) ya da hata metni."""
     g = is_part(obj)
