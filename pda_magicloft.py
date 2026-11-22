@@ -1163,6 +1163,19 @@ class ViewProviderMagicLoft:
     def attach(self, vobj):
         self.Object = vobj.Object
 
+    def claimChildren(self):
+        """Profiller ve secilen rehberler agacta Magic Loft'un altinda (Loft / Pipe gibi)."""
+        obj = getattr(self, "Object", None)
+        if obj is None:
+            return []
+        objs = []
+        for name in ("Profiles", "Guides"):
+            try:
+                objs += [o for o, _ in get_items(obj, name)]
+            except Exception:
+                pass
+        return rp.claim_inputs(obj, objs)
+
     def doubleClicked(self, vobj):
         import FreeCADGui as Gui
         Gui.ActiveDocument.setEdit(vobj.Object, 0)

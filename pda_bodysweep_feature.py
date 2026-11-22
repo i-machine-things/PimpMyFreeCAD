@@ -293,6 +293,20 @@ class ViewProviderBodySweep:
     def attach(self, vobj):
         self.Object = vobj.Object
 
+    def claimChildren(self):
+        """Yol sketch'i agacta Body Sweep'in altinda (Pipe gibi). Arac kati (ayri Body) alinmaz: kendi yerinde kalir."""
+        obj = getattr(self, "Object", None)
+        if obj is None:
+            return []
+        objs = []
+        try:
+            objs = [o for o, _ in (obj.Path or [])]
+            if obj.SupportFace:
+                objs.append(obj.SupportFace[0])
+        except Exception:
+            pass
+        return rp.claim_inputs(obj, objs)
+
     def doubleClicked(self, vobj):
         import FreeCADGui as Gui
         Gui.ActiveDocument.setEdit(vobj.Object, 0)

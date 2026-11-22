@@ -31,6 +31,28 @@ def _is_sketch(o):
     return o is not None and (o.TypeId == "Sketcher::SketchObject" or o.isDerivedFrom("Part::Part2DObject"))
 
 
+INPUT_TYPES = ("Sketcher::SketchObject", "PartDesign::SubShapeBinder", "PartDesign::ShapeBinder")
+
+
+def claim_inputs(owner, objs):
+    """Agacta ozelligin altina alinacak girdiler (Pad / Loft / Part Loft gibi): sketch, 2B nesne ve Binder'lar; yalniz
+    ozellikle ayni grupta olanlar (ayni Body, ya da Body disinda Body disi). Kati ozellik yuzu (onceki adim) alinmaz."""
+    out = []
+    try:
+        grp = owner.getParentGeoFeatureGroup()
+        for o in objs:
+            if o is None or o is owner or o in out:
+                continue
+            if not (o.TypeId in INPUT_TYPES or o.isDerivedFrom("Part::Part2DObject")):
+                continue
+            if o.getParentGeoFeatureGroup() != grp:
+                continue
+            out.append(o)
+    except Exception:
+        pass
+    return out
+
+
 def is_part(obj):
     """Part workbench'teki Rail Pipe (Body disinda, kendi basina kati) mi; degilse PartDesign adimi."""
     return not obj.TypeId.startswith("PartDesign::")
@@ -1233,24 +1255,16 @@ class ViewProviderRailPipe:
         self.Object = vobj.Object
 
     def claimChildren(self):
-        """Agacta profil sketch'i (ve Binder'i) Rail Pipe'in altinda gorunur (Pad'deki gibi). Yalniz ayni Body'nin
-        PartDesign profilleri: Part surumunde profil baska bir nesnenin yuzu olabilir."""
+        """Agacta profil sketch'i (ve Binder'i) Rail Pipe'in altinda gorunur (Pad'deki gibi); Part surumunde de, ayni
+        gruptaysa (Part Loft gibi)."""
         obj = getattr(self, "Object", None)
-        out = []
-        try:
-            if obj is None or is_part(obj):
-                return out
-            body = obj.getParentGeoFeatureGroup()
-            for link in (obj.StartFace, obj.EndFace):
-                o = link[0] if link else None
-                if o is None or o in out:
-                    continue
-                if (_is_sketch(o) or o.TypeId == "PartDesign::SubShapeBinder") and \
-                        o.getParentGeoFeatureGroup() == body:
-                    out.append(o)
-        except Exception:
-            pass
-        return out
+        if obj is None:
+            return []
+        links = []
+        for name in ("StartFace", "EndFace"):
+            link = getattr(obj, name, None)
+            links.append(link[0] if link else None)
+        return claim_inputs(obj, links)
 
     def doubleClicked(self, vobj):
         import FreeCADGui as Gui
