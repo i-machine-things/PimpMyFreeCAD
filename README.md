@@ -148,6 +148,10 @@ the look off. It is display only: the document does not change and STEP export i
 restart. A matcap replaces the object's own colour; selected and preselected faces still show FreeCAD's highlight colours.
 Meshes are not included.
 
+*Matcap with FreeCAD lights* (a check button next to it) lights the matcap with FreeCAD's own headlight, backlight and fill
+light (direction, colour, intensity, on / off, from Preferences > Display > 3D View) instead of the matcap's studio light.
+A change in those settings updates the look at once. Zebra, Metal and Draft analysis are not affected.
+
 The same button has two analysis views. *Zebra* shows reflection stripes, which break at a kink. *Draft analysis* opens a small
 window for the pull direction and minimum draft, and colours faces by their angle: green has enough draft, yellow too little, red
 is an undercut.
@@ -231,5 +235,6 @@ Delikli halkalar ve çok ince şekiller başarısız olabilir.
 
 **Matcap:** açılır düğmeden Part ve PartDesign şekilleri için Kil, Plastik, Siyah plastik, Seramik ya da Metal görünümünü seçin
 veya kapatın. Yalnız görünümdür, belge ve STEP değişmez; seçim yeniden başlatınca geri gelir. Nesnenin kendi rengi görünmez, seçim
-ve ön seçim renkleri görünür. Mesh nesneleri kapsam dışıdır. Aynı düğmede iki analiz görünümü var: *Zebra* yansıma şeritlerini gösterir,
+ve ön seçim renkleri görünür. Mesh nesneleri kapsam dışıdır. *Matcap FreeCAD ışıklarıyla* düğmesi açıkken matcap, FreeCAD'in ana, arka ve
+dolgu ışığıyla (Tercihler > Görüntü > 3B Görünüm) aydınlatılır; ayar değişince görünüm hemen güncellenir. Aynı düğmede iki analiz görünümü var: *Zebra* yansıma şeritlerini gösterir,
 *Kalıp açısı analizi* açılma yönü ve en küçük açı penceresini açar; yeşil açı yeterli, sarı az, kırmızı ters açıdır.

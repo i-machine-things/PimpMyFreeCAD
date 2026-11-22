@@ -321,6 +321,26 @@ class _MatcapMenu:
         return True
 
 
+class _MatcapLights:
+    """Secenek dugmesi (isaretlenebilir): matcap FreeCAD'in isik ayarlarini (headlight, backlight, fill light) kullansin."""
+
+    def GetResources(self):
+        import pda_common
+        return {"Pixmap": os.path.join(ICONS, "pda_matcap_lights.svg"), "MenuText": T("Matcap with FreeCAD lights"),
+                "ToolTip": T("Light the matcap with FreeCAD's headlight, backlight and fill light (Preferences > Display > "
+                             "3D View). Off: the matcap's own studio light. Zebra, Metal and Draft are not affected"),
+                "Checkable": pda_common._param().GetBool("MatcapFreeCADLights", False)}
+
+    def IsActive(self):
+        return True
+
+    def Activated(self, checked=None):
+        import pda_common
+        import pda_matcap
+        on = bool(checked) if checked is not None else not pda_common._param().GetBool("MatcapFreeCADLights", False)
+        pda_matcap.set_fc_lights(on)
+
+
 class _StepCheck:
     """STEP kontrolu: secili kati disa aktarmaya uygun mu (pda_stepcheck). Sekle dokunmaz."""
 
@@ -342,7 +362,7 @@ class _StepCheck:
 
 
 COMMANDS = ["PDA_RailPipe", "PDA_RailGroove", "PDA_MagicLoft", "PDA_MagicLoftCut", "PDA_Dome", "PDA_BodySweep"]
-OPTIONS = ["PDA_RailPipeOwnBody", "PDA_Matcap", "PDA_StepCheck"]
+OPTIONS = ["PDA_RailPipeOwnBody", "PDA_Matcap", "PDA_MatcapLights", "PDA_StepCheck"]
 
 Gui.addCommand("PDA_RailPipe", _RailPipe(False))
 Gui.addCommand("PDA_RailGroove", _RailPipe(True))
@@ -354,4 +374,5 @@ Gui.addCommand("PDA_RailPipeOwnBody", _OwnBody())
 for _m in MATCAPS:
     Gui.addCommand("PDA_Matcap_" + _m[1], _MatcapChoice(*_m))
 Gui.addCommand("PDA_Matcap", _MatcapMenu())
+Gui.addCommand("PDA_MatcapLights", _MatcapLights())
 Gui.addCommand("PDA_StepCheck", _StepCheck())

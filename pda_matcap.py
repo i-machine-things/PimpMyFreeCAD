@@ -15,6 +15,7 @@ import pda_common
 from pda_i18n import T
 
 PARAM = "Matcap"
+LIGHTS = "MatcapFreeCADLights"   # acik: doku FreeCAD'in headlight / backlight / fill light ayarindan aydinlatilir
 
 # Ayar: taban rengi, ortam, ana / dolgu isigi, parlama (guc, siddet), kenar kararmasi, kenar parlamasi; "env": taban
 # yerine studyo yansimasi (metal).
@@ -44,8 +45,67 @@ _panel = None
 _observer = None
 
 
-def _matcap_image(name, size=256):
-    """MATCAPS ayarindan size x size RGB doku (bytes; ilk satir kurenin alti, Coin dokusu gibi)."""
+def use_fc_lights():
+    return pda_common._param().GetBool(LIGHTS, False)
+
+
+def _viewer():
+    """Bir 3B gorunumun Coin goruntuleyicisi (etkin belge once)."""
+    docs = [Gui.ActiveDocument] + [Gui.getDocument(d) for d in App.listDocuments()]
+    for gd in docs:
+        v = getattr(gd, "ActiveView", None) if gd is not None else None
+        if v is not None and hasattr(v, "getViewer"):
+            try:
+                return v.getViewer()
+            except Exception:
+                pass
+    return None
+
+
+def fc_lights():
+    """FreeCAD'in yonlu isiklari goz (kamera) koordinatinda: ([(isiga dogru yon, renk, siddet)], ortam rengi) ya da None.
+    Olculdu (27.1): headlight ve backlight kokte kameradan once (goz koordinati); fill light kamerayi izleyen bir Rotation
+    altinda. Kameradan sonra gelen isik dunyadan goze cevrilir, yani ikisi de dogru okunur ve kamera donunce degismez."""
+    vw = _viewer()
+    if vw is None:
+        return None
+    try:
+        rm = vw.getSoRenderManager()
+        root, cam = rm.getSceneGraph(), rm.getCamera()
+        vp = rm.getViewportRegion()
+    except Exception:
+        return None
+    if root is None or cam is None:
+        return None
+    root = coin.cast(root, "SoGroup") if not isinstance(root, coin.SoGroup) else root
+    ci = root.findChild(cam)
+    qi = cam.orientation.getValue().inverse()
+    out = []
+    for p in _paths(root, type_name="SoDirectionalLight"):
+        L = coin.cast(p.getTail(), "SoDirectionalLight")
+        if not L.on.getValue() or L.intensity.getValue() <= 0:
+            continue
+        d = L.direction.getValue()
+        top = root.findChild(p.getNode(1)) if p.getLength() > 1 else -1
+        if ci < 0 or top > ci:                             # kameradan sonra: dunya -> goz
+            ma = coin.SoGetMatrixAction(vp)
+            ma.apply(p)
+            d = qi.multVec(ma.getMatrix().multDirMatrix(d))
+        v = -np.array(d.getValue(), float)                 # isigin geldigi yon
+        nv = np.linalg.norm(v)
+        if nv < 1e-9:
+            continue
+        out.append((v / nv, np.array(L.color.getValue().getValue(), float), float(L.intensity.getValue())))
+    amb = np.ones(3)
+    env = _paths(root, type_name="SoEnvironment")
+    if env:
+        amb = np.array(coin.cast(env[0].getTail(), "SoEnvironment").ambientColor.getValue().getValue(), float)
+    return (out, amb) if out else None
+
+
+def _matcap_image(name, size=256, lights=None):
+    """MATCAPS ayarindan size x size RGB doku (bytes; ilk satir kurenin alti, Coin dokusu gibi). lights: fc_lights()
+    sonucu; verilirse ana / dolgu isigi yerine FreeCAD'in isiklari (malzemenin parlama, kenar, AO ayari korunur)."""
     c = MATCAPS[name]
     y, x = np.mgrid[0:size, 0:size]
     x, y = (x + 0.5) / size * 2 - 1, (y + 0.5) / size * 2 - 1
@@ -67,11 +127,24 @@ def _matcap_image(name, size=256):
         t = np.clip((ry + 0.04) / 0.08, 0, 1)
         env = ground + t * t * (3 - 2 * t) * (sky - ground) + 0.30 * np.exp(-(ry / 0.05) ** 2)
         rgb = env[..., None] * base
+    elif lights:
+        ls, amb = lights
+        ref = max(i for _, _, i in ls)                     # en guclu isik malzemenin ana isigi kadar
+        dif = c["amb"] * amb[None, None, :] + 0 * n
+        for d, col, inten in ls:
+            dif = dif + c["key"] * inten / ref * np.maximum(n @ d, 0)[..., None] * col[None, None, :]
+        rgb = dif * base
     else:
         dif = c["amb"] + c["key"] * np.maximum(n @ key, 0) + c["fill"] * np.maximum(n @ fill, 0)
         rgb = dif[..., None] * base
     p, k = c["spec"]
-    rgb = rgb + (k * np.maximum(n @ half, 0) ** p)[..., None]
+    if lights and not c.get("env"):
+        ls, ref = lights[0], max(i for _, _, i in lights[0])
+        for d, col, inten in ls:
+            h = (d + (0, 0, 1)) / max(np.linalg.norm(d + (0, 0, 1)), 1e-9)
+            rgb = rgb + (k * inten / ref * np.maximum(n @ h, 0) ** p)[..., None] * col[None, None, :]
+    else:
+        rgb = rgb + (k * np.maximum(n @ half, 0) ** p)[..., None]
     rgb = rgb + (c["rim"] * (1 - n[..., 2]) ** 4 * np.clip(y * 0.5 + 0.5, 0, 1))[..., None]
     t = np.clip(n[..., 2] / 0.55, 0, 1)                    # kenara dogru karar: sahte AO
     rgb = rgb * (1 - c["ao"] * (1 - t * t * (3 - 2 * t)))[..., None]
@@ -298,8 +371,7 @@ def set_matcap(name):
         if name == DRAFT:
             set_draft()
         else:
-            size = 1024 if MATCAPS[name].get("zebra") else 256   # keskin seritler
-            _tex.image.setValue(coin.SbVec2s(size, size), 3, _matcap_image(name, size))
+            _set_texture(name)
         if _observer is None:
             _observer = _Observer()
             App.addDocumentObserver(_observer)
@@ -313,6 +385,62 @@ def set_matcap(name):
             for root in _view_roots(doc):
                 _uninstall(root)
     _redraw()
+
+
+_lights_key = None
+_light_obs = None
+
+
+def _set_texture(name):
+    """Dokuyu (yeniden) uretir; FreeCAD isiklari aciksa onlarla."""
+    global _lights_key
+    c = MATCAPS[name]
+    size = 1024 if c.get("zebra") else 256                 # keskin seritler
+    lights = fc_lights() if use_fc_lights() and not c.get("zebra") and not c.get("env") else None
+    _lights_key = _key(lights)
+    _tex.image.setValue(coin.SbVec2s(size, size), 3, _matcap_image(name, size, lights))
+    _watch_lights()
+
+
+def _key(lights):
+    if not lights:
+        return None
+    return tuple(np.round(np.concatenate([np.concatenate([d, col, [i]]) for d, col, i in lights[0]] + [lights[1]]), 4))
+
+
+class _LightObserver:
+    """View tercihlerinde isik ayari degisince doku yenilenir (FreeCAD isiklari uyguladiktan sonra okunur)."""
+
+    def OnChange(self, grp, reason):
+        if "light" in reason.lower() or "ambient" in reason.lower():
+            from PySide import QtCore
+            QtCore.QTimer.singleShot(150, refresh_lights)
+
+
+def _watch_lights():
+    global _light_obs
+    if _light_obs is None:
+        _light_obs = _LightObserver()
+        App.ParamGet("User parameter:BaseApp/Preferences/View").Attach(_light_obs)
+
+
+def refresh_lights(force=False):
+    """Isiklar degistiyse (ya da force) etkin matcap dokusu yenilenir."""
+    name = current()
+    if not name or name == DRAFT or _tex is None:
+        return
+    c = MATCAPS[name]
+    if c.get("zebra") or c.get("env"):
+        return
+    lights = fc_lights() if use_fc_lights() else None
+    if force or _key(lights) != _lights_key:
+        _set_texture(name)
+        _redraw()
+
+
+def set_fc_lights(on):
+    pda_common._param().SetBool(LIGHTS, bool(on))
+    refresh_lights(force=True)
 
 
 def restore():

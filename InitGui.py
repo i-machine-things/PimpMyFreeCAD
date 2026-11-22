@@ -41,7 +41,7 @@ class _PartDesignTools:
         return ([{"append": c, "toolBar": "Part Design Modeling Features"}
                  for c in pda_commands.COMMANDS + pda_commands.OPTIONS]
                 + [{"append": c, "toolBar": "Part Tools"}          # ("insert" + "toolItem": Part_Sweep yerlesmiyordu)
-                   for c in ("PDA_RailPipe", "PDA_MagicLoft", "PDA_BodySweep", "PDA_Matcap", "PDA_StepCheck")])
+                   for c in ("PDA_RailPipe", "PDA_MagicLoft", "PDA_BodySweep", "PDA_Matcap", "PDA_MatcapLights", "PDA_StepCheck")])
 
 
 class _RestoreObserver:

@@ -147,6 +147,10 @@ TR = {
         'Matcap',
     'Matcap off':
         'Matcap kapalı',
+    'Matcap with FreeCAD lights':
+        "Matcap FreeCAD ışıklarıyla",
+    "Light the matcap with FreeCAD's headlight, backlight and fill light (Preferences > Display > 3D View). Off: the matcap's own studio light. Zebra, Metal and Draft are not affected":
+        "Matcap'i FreeCAD'in ana, arka ve dolgu ışığıyla aydınlatır (Tercihler > Görüntü > 3B Görünüm). Kapalı: matcap'in kendi stüdyo ışığı. Zebra, Metal ve Kalıp açısı etkilenmez",
     'Clay':
         'Kil',
     'Plastic':
