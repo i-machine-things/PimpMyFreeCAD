@@ -81,6 +81,10 @@ class _RestoreObserver:
                for o in doc.Objects):
             import pda_bodysweep_feature
             pda_bodysweep_feature.repair_proxies(doc)
+        if any("TwistCenter" in o.PropertiesList and "Profile" in o.PropertiesList and
+               type(getattr(o, "Proxy", None)).__module__ != "pda_magicpad" for o in doc.Objects):
+            import pda_magicpad
+            pda_magicpad.repair_proxies(doc)
         if App.ParamGet("User parameter:BaseApp/Preferences/Mod/PimpMyPartDesign").GetString("Matcap", ""):
             import pda_matcap                              # son secilen gorunum; kapaliyken modul yuklenmez
             pda_matcap.restore()

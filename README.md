@@ -2,7 +2,7 @@
 
 Extra modeling tools for FreeCAD's **PartDesign** and **Part** workbenches. In a Body they are real PartDesign steps (like
 Pad or Pocket): they recompute with the Body, later steps (fillets, pockets) build on them and the result exports to STEP.
-Rail Pipe and Magic Loft also make standalone solids in the Part workbench. The tools show up in PartDesign's own
+Magic Pad is Pad and Pocket in one tool with a draggable arrow. Rail Pipe and Magic Loft also make standalone solids in the Part workbench. The tools show up in PartDesign's own
 *Part Design Modeling Features* toolbar (next to Additive / Subtractive Pipe) and in a small *Pimp My FreeCAD* workbench.
 
 Requires **FreeCAD 1.0 or newer** (developed on 26.3). No extra Python packages.
@@ -86,6 +86,29 @@ curvature (G2) ends and open profiles are not available.
 **Section smoothing:** a line-to-arc joint is tangent, but its curvature jumps, and the one-piece surface ripples around it (Zebra
 shows this as corners in the stripes). *Section smoothing* in the panel filters such a profile, up to the deviation you set. At 0 the
 sketch is followed exactly. Circles, single curves and profiles with sharp corners do not change.
+
+## Magic Pad
+
+Pad and Pocket in one tool. Select a closed sketch (holes and several separate regions are fine) or a flat face of a
+Body and press **Magic Pad**. Pull the arrow out of the solid to add material, push it into the solid to cut: the preview
+is green or red and changes colour as it crosses zero. **Double-click the arrow** to flip the direction. Click the orange
+value next to the arrow to type a length; the panel fields take FreeCAD expressions (fx).
+
+- **Extent:** *Length*, *Two lengths*, *Symmetric*, *Through all*, *Up to body*, *Up to first face*, *Up to last face*,
+  *Up to face* and *Up to shape*. For the last two press *Select...* and click the face or solid in the 3D view.
+- **Up to body** stops every point where it first meets the Body, so a pad from a sketch to a hollow tube, onto a seam or
+  with a profile wider than the target works. The part of the profile that misses is cut off or goes to *Length*.
+  *Up to shape* does the same with another solid or Body.
+- **Up to face** extends the chosen face: a plane without limit, a cylinder or cone along its axis, a sphere or torus to
+  the full surface. *Up to first face* finds the first face hit, *Up to last face* goes through the Body to where it
+  leaves it last.
+- **Operation:** *Auto* adds or cuts by direction; choose *Add* or *Cut* when the direction does not tell it right.
+- **Taper and twist** work in every mode (twist around the profile centre or the sketch origin, optional ease in / out).
+- **Fast:** while you drag there is no boolean, only the volume to add or cut; the lines where it meets the Body appear
+  when you release the arrow. The solid is computed on **OK**, one undo step.
+
+Limits: twist and taper rebuild the side faces, so turning them on or off can break fillets and sketches attached to
+those faces. The boolean still runs in FreeCAD's process; a separate safe worker is planned.
 
 ## Dome
 
@@ -219,6 +242,14 @@ köşeli kesit değişmez.
 
 **STEP kontrolü:** şekilleri seçip düğmeye basın. Pencere geçerlilik, kapalılık, en büyük tolerans, çok kısa kenarlar ve deneme aktarımından
 dönen katı, yüz, kenar, hacim ve sınır kutusunu raporlar. Şekiller değişmez, geçici dosya silinir.
+
+**Sihirli Pad (Magic Pad):** Pad ve Pocket tek araçta. Body'nin kapalı bir sketch'ini ya da düz yüzünü seçip düğmeye basın;
+oku katının dışına çekmek ekler, içine itmek keser (önizleme yeşil / kırmızı). Yönü çevirmek için oka çift tıklayın; okun
+yanındaki turuncu değere tıklayıp uzunluk yazabilirsiniz, paneldeki alanlar FreeCAD ifadelerini (fx) kabul eder. Modlar:
+Uzunluk, İki uzunluk, Simetrik, Sonuna kadar, Gövdeye kadar (her nokta gövdeye ilk değdiği yerde durur; içi boş tüp ve
+geniş profil de olur), İlk yüze kadar, Son yüze kadar, Yüze kadar (seçilen yüz uzatılır) ve Şekle kadar (başka bir katı ya da
+gövde). *İşlem* Otomatik yöne göre ekler ya da keser; gerekirse Ekle / Kes seçilir. Eğim (taper) ve burulma (twist) her modda
+çalışır. Sürüklerken boolean yapılmaz, katı **Tamam**'da hesaplanır.
 
 **Kubbe (Dome):** bir Body'nin düz yüzünü seçip düğmeye basın, *Yükseklik* verin; yüz, kenarlarda komşu yüzlere teğet bir
 kubbeye dönüşür, *Ters* katının içine oyar. Çevresi duvarsa kubbe duvarın kendi eğimiyle teğet başlar (mermi biçimi; eğimli

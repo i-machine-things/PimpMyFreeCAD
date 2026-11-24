@@ -154,6 +154,58 @@ class _MagicLoft:
         pda_magicloft_gui.fresh = None
 
 
+class _MagicPad:
+    """Magic Pad: tek aracta Pad ve Pocket (pda_magicpad). Secili kapali sketch ya da duz yuz; ok disari cekilince ekler,
+    iceri itilince keser. Gorev paneli hemen acilir."""
+
+    def GetResources(self):
+        return {"Pixmap": os.path.join(ICONS, "pda_magicpad.svg"), "MenuText": T("Magic Pad"),
+                "ToolTip": T("PartDesign: Pad and Pocket in one tool. Pull the arrow out of the solid to add, push it in "
+                             "to cut. Up to body stops where the profile first meets the Body; twist and taper")}
+
+    def IsActive(self):
+        return App.ActiveDocument is not None
+
+    def Activated(self):
+        import pda_magicpad
+        sel = Gui.Selection.getSelectionEx()
+        prof, subs = None, []
+        for so in sel:
+            names = [s for s in so.SubElementNames if s.startswith("Face")]
+            if names:
+                prof, subs = so.Object, names[:1]
+                break
+            if so.Object.isDerivedFrom("Part::Part2DObject"):
+                prof = so.Object
+                break
+        if prof is None:
+            App.Console.PrintWarning(T("Magic Pad: select a closed sketch or a flat face of the Body.\n"))
+            return
+        body = prof.getParentGeoFeatureGroup()
+        if body is None or body.TypeId != "PartDesign::Body":
+            App.Console.PrintWarning(T("Magic Pad: the sketch or face must belong to a PartDesign Body.\n"))
+            return
+        doc = prof.Document
+        doc.openTransaction(T("Magic Pad"))
+        new = pda_magicpad.make(body, prof, subs)
+        if isinstance(new, str):
+            doc.abortTransaction()
+            App.Console.PrintWarning(T(new) + "\n")
+            return
+        doc.recompute()
+        if not subs and hasattr(prof, "ViewObject") and prof.ViewObject is not None:
+            prof.ViewObject.Visibility = False
+        if getattr(new, "BaseFeature", None) is not None and "Invalid" not in new.State:
+            new.BaseFeature.ViewObject.Visibility = False
+            new.ViewObject.Visibility = True
+        doc.commitTransaction()
+        Gui.Selection.clearSelection()
+        import pda_magicpad_gui                            # panelin Cancel'i bu olusturma adimini da geri alir
+        pda_magicpad_gui.fresh = new
+        Gui.ActiveDocument.setEdit(new, 0)
+        pda_magicpad_gui.fresh = None
+
+
 class _BodySweep:
     """Body Sweep: bir alet katisini yol boyunca supur, zarfla bir ya da birden fazla govdeyi kes (pda_bodysweep_feature).
     Secim sirasi: alet katisi, yol (sketch / kenarlar), kesilecek govdeler; eksikler panelde secilir."""
@@ -361,7 +413,7 @@ class _StepCheck:
         pda_stepcheck.show(objs)
 
 
-COMMANDS = ["PDA_RailPipe", "PDA_RailGroove", "PDA_MagicLoft", "PDA_MagicLoftCut", "PDA_Dome", "PDA_BodySweep"]
+COMMANDS = ["PDA_MagicPad", "PDA_RailPipe", "PDA_RailGroove", "PDA_MagicLoft", "PDA_MagicLoftCut", "PDA_Dome", "PDA_BodySweep"]
 OPTIONS = ["PDA_RailPipeOwnBody", "PDA_Matcap", "PDA_MatcapLights", "PDA_StepCheck"]
 
 Gui.addCommand("PDA_RailPipe", _RailPipe(False))
@@ -370,6 +422,7 @@ Gui.addCommand("PDA_MagicLoft", _MagicLoft(False))
 Gui.addCommand("PDA_MagicLoftCut", _MagicLoft(True))
 Gui.addCommand("PDA_Dome", _Dome())
 Gui.addCommand("PDA_BodySweep", _BodySweep())
+Gui.addCommand("PDA_MagicPad", _MagicPad())
 Gui.addCommand("PDA_RailPipeOwnBody", _OwnBody())
 for _m in MATCAPS:
     Gui.addCommand("PDA_Matcap_" + _m[1], _MatcapChoice(*_m))

@@ -21,6 +21,8 @@ V = App.Vector
 FREE_DEG = 60.0             # komsu bu acidan dik: teget olunamaz (egim sonsuza gider), kenar egimi serbest birakilir
 WALL_DEG = 30.0             # butun komsular en az bu kadar egimliyse kubbe duvarlara teget cikar (pah da olur)
 ROW_TOL = 2e-3              # duvar boyunca orta sira: yukseklik basina izin verilen sapma
+MAX_ROW_TRIES = 6           # orta sira uydurma: en cok bu kadar deneme (her birinde dugum sayisi ikiye katlanir)
+MAX_ROW_POLES = 300         # ...ve kenar basina en cok bu kadar kontrol noktasi
 CORNER_DEG = 10.0         # kenar birlesiminde bu acinin ustu kosedir: egim koseye dogru sifira iner
 CELLS = (40, 56)            # kenar boslugu buyukse ikinci, ince izgara
 GAP_OK = 1e-3               # mm
@@ -433,9 +435,13 @@ def ellipse_patches(face, shape, center, height, sign):
         f = neighbour(shape, e, face)
         span = (e.FirstParameter, e.LastParameter)
         for cv in _smooth_spans(e):
-            for _ in range(4):                             # egimli duvarda orta sira egrinin tabanina sigmayabilir: dugum ekle
+            # egimli / burulmus duvarda orta sira egrinin tabanina sigmayabilir: dugum ekle. Dongu her zaman egriyle ayni
+            # sayida orta sira noktasiyla biter: once 4 denemeden sonra dugum eklenip orta sira yeniden hesaplanmiyordu,
+            # yama 67 kenar / 35 orta kutupla kurulup gecersiz kaliyordu (twistli Magic Pad'in ust yuzu: hata 0.76 ->
+            # 0.06 mm, hedef 0.02) ve kubbe duz kabarcik oluyordu
+            for it in range(MAX_ROW_TRIES):
                 mid, err = _wall_row(cv, f, n, height, sign, span, corners.get((i, 0)), corners.get((i, 1)), joints)
-                if err < ROW_TOL * max(height, 1.0):
+                if err < ROW_TOL * max(height, 1.0) or it == MAX_ROW_TRIES - 1 or cv.NbPoles > MAX_ROW_POLES:
                     break
                 k = cv.getKnots()
                 for a, b in zip(k[:-1], k[1:]):

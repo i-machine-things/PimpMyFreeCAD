@@ -1,5 +1,36 @@
 # Changelog
 
+## Unreleased
+
+### New: Magic Pad
+
+- **Pad and Pocket in one tool.** Select a closed sketch or a flat face of a Body and press **Magic Pad**. Pull the arrow
+  out of the solid to add material, push it in to cut; the preview turns green or red as it crosses zero. **Double-click
+  the arrow** to flip the direction. The value box next to the arrow takes a typed length; the panel fields take
+  FreeCAD expressions (fx).
+- **Extent:** Length, Two lengths, Symmetric, Through all, **Up to body** (every point stops where it first meets the
+  Body: hollow tubes, seams and profiles wider than the target work; the part that misses is cut off or goes to Length),
+  **Up to first face**, **Up to last face**, **Up to face** (planes are extended without limit, cylinders and cones along
+  their axis, spheres and tori to the full surface) and **Up to shape** (another solid or Body).
+- **Operation:** *Auto* decides add or cut from the direction (into the solid cuts, out of it adds); *Add* and *Cut*
+  force it for special cases. The tree icon follows the operation.
+- **Taper and twist** in every mode, with profile centre or sketch origin as the axis and optional ease in / out. In the
+  Up to modes the twist is completed at the contact. Profiles with holes and several separate regions work.
+- **Fast preview:** no boolean while dragging, only the volume to add or cut; the intersection with the Body is drawn
+  when the arrow is released. On a plate with 400 holes a preview update takes about 1 ms (FreeCAD's Pad: 3 s) and the
+  final recompute 1.8 s (Pad: 3.3 s).
+- **Topological naming:** the plain extrusion keeps FreeCAD's element map; a sketch and a fillet on the top face survive
+  length and profile changes. Turning twist or taper on or off rebuilds the side faces and can break fillets attached to
+  them (noted in the panel).
+
+### Dome
+
+- **Tangency lost on twisted / leaning walls fixed:** the knot insertion stopped after 4 tries without recomputing the
+  wall row, so the patch got 67 edge poles against 35 middle poles, became invalid and Dome fell back to a free bump. The
+  loop now always ends with a matching row (tangent error 0.002 degrees on the test part).
+- Known: on long, sharp outlines (tip radius about 1.6 mm with twisted walls) a tall tangent dome folds near the tip
+  (above about 20 mm). Keep it lower or turn off *Tangent to steep walls*; a ridge-shaped top is planned.
+
 ## 0.4.1 (2026-11-22)
 
 ### Matcap

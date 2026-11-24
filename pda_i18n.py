@@ -435,6 +435,142 @@ TR = {
         'Kılavuz',
     'Move neighbors':
         'Komşular da gelsin',
+    'Edit Magic Pad':
+        "Magic Pad'i düzenle",
+    'Magic Pad':
+        'Magic Pad',
+    'Drag the arrow: out of the solid adds, into it cuts.':
+        'Oku sürükleyin: katının dışına çekmek ekler, içine itmek keser.',
+    'Extent':
+        'Uzunluk ayarı',
+    'Type':
+        'Tür',
+    'Length':
+        'Uzunluk',
+    'Two lengths':
+        'İki uzunluk',
+    'Symmetric':
+        'Simetrik',
+    'Through all':
+        'Sonuna kadar',
+    'Up to body':
+        'Gövdeye kadar',
+    'Second length':
+        'İkinci uzunluk',
+    'Cut off':
+        'Kes',
+    'Go to Length':
+        'Uzunluğa kadar git',
+    'Missed part':
+        'Değmeyen kısım',
+    'Up to body: what happens to the part of the profile that does not meet the Body':
+        'Gövdeye kadar: profilin gövdeye değmeyen kısmına ne olacağı',
+    'Reversed':
+        'Ters yön',
+    'Shape':
+        'Şekil',
+    'Taper angle':
+        'Eğim açısı',
+    'Twist':
+        'Twist (burulma)',
+    'Profile center':
+        'Profil merkezi',
+    'Sketch origin':
+        'Sketch orijini',
+    'Twist axis':
+        'Twist ekseni',
+    'Ease in / out':
+        'Yumuşak başla / bitir',
+    'Refine':
+        'Sadeleştir (refine)',
+    'Twist and taper rebuild the side faces: turning them on or off, or changing the profile of a twisted feature, can break fillets and sketches attached to it.':
+        "Twist ve eğim yan yüzleri yeniden kurar: bunları açıp kapatmak ya da twistli bir özelliğin profilini değiştirmek, ona bağlı fillet ve sketch'leri koparabilir.",
+    'Magic Pad: the twist gave no solid':
+        'Magic Pad: twist katı vermedi',
+    'Cut':
+        'Kes',
+    'Add':
+        'Ekle',
+    'PartDesign: Pad and Pocket in one tool. Pull the arrow out of the solid to add, push it in to cut. Up to body stops where the profile first meets the Body; twist and taper':
+        'PartDesign: Pad ve Pocket tek araçta. Oku katının dışına çekince ekler, içine itince keser. Gövdeye kadar, profilin gövdeye ilk değdiği yerde durur; twist ve eğim',
+    'Magic Pad: select a closed sketch or a flat face of the Body.\n':
+        'Magic Pad: kapalı bir sketch ya da gövdenin düz bir yüzünü seçin.\n',
+    'Magic Pad: the sketch or face must belong to a PartDesign Body.\n':
+        "Magic Pad: sketch ya da yüz bir PartDesign Body'sine ait olmalı.\n",
+    'Magic Pad: select a closed sketch or a flat face':
+        'Magic Pad: kapalı bir sketch ya da düz bir yüz seçin',
+    'Magic Pad: the sketch has no closed profile':
+        "Magic Pad: sketch'te kapalı profil yok",
+    'Magic Pad: the profile could not be read (%s)':
+        'Magic Pad: profil okunamadı (%s)',
+    'Magic Pad: the profile has no area':
+        'Magic Pad: profilin alanı yok',
+    'Magic Pad: the profile must be flat':
+        'Magic Pad: profil düz olmalı',
+    'Magic Pad: the taper is too large for the profile':
+        'Magic Pad: eğim bu profil için çok büyük',
+    'Magic Pad: the length is zero':
+        'Magic Pad: uzunluk sıfır',
+    'Magic Pad: the shape failed (%s)':
+        'Magic Pad: şekil oluşturulamadı (%s)',
+    'Magic Pad: Up to body: the Body is not in front of the profile':
+        'Magic Pad: Gövdeye kadar: gövde profilin önünde değil',
+    'Magic Pad: Up to body: the profile does not reach the Body':
+        'Magic Pad: Gövdeye kadar: profil gövdeye ulaşmıyor',
+    'Magic Pad: nothing to cut (the Body is empty)':
+        'Magic Pad: kesilecek bir şey yok (Body boş)',
+    'Magic Pad: the boolean with the Body failed (%s)':
+        'Magic Pad: gövdeyle boolean başarısız (%s)',
+    'Magic Pad: Up to body failed (%s)':
+        'Magic Pad: Gövdeye kadar başarısız (%s)',
+    'Up to first face':
+        'İlk yüze kadar',
+    'Up to last face':
+        'Son yüze kadar',
+    'Up to face':
+        'Yüze kadar',
+    'Up to shape':
+        'Şekle kadar',
+    'Select...':
+        'Seç...',
+    'Target':
+        'Hedef',
+    '(none)':
+        '(yok)',
+    'Click the target in the 3D view':
+        'Hedefi 3B görünümde tıkla',
+    'Then click the face (Up to face) or the solid (Up to shape) in the 3D view':
+        'Sonra 3B görünümde yüzü (Yüze kadar) ya da katıyı (Şekle kadar) tıkla',
+    'Select a face':
+        'Bir yüz seç',
+    'Select another solid (for this Body use Up to body)':
+        "Başka bir katı seç (bu gövde için Gövdeye kadar'ı kullan)",
+    'Magic Pad: %s: the target is not in front of the profile (try Reversed)':
+        "Magic Pad: %s: hedef profilin önünde değil (Ters yön'ü dene)",
+    'Magic Pad: Up to last: the Body is not in front of the profile (try Reversed)':
+        "Magic Pad: Son yüze kadar: gövde profilin önünde değil (Ters yön'ü dene)",
+    'Magic Pad: Up to first: the Body is not in front of the profile (try Reversed)':
+        "Magic Pad: İlk yüze kadar: gövde profilin önünde değil (Ters yön'ü dene)",
+    'Magic Pad: select the target (Up to face / Up to shape)':
+        'Magic Pad: hedefi seç (Yüze kadar / Şekle kadar)',
+    'Magic Pad: Up to shape: the target has no solid; use Up to face':
+        "Magic Pad: Şekle kadar: hedefte katı yok; Yüze kadar'ı kullan",
+    'Magic Pad: Up to face: the target is not a face':
+        'Magic Pad: Yüze kadar: hedef bir yüz değil',
+    'Magic Pad: %s needs a solid in the Body':
+        'Magic Pad: %s için gövdede bir katı olmalı',
+    'Magic Pad: %s failed (%s)':
+        'Magic Pad: %s başarısız (%s)',
+    'Auto (by direction)':
+        'Otomatik (yöne göre)',
+    'Operation':
+        'İşlem',
+    'Auto: into the solid cuts, out of it adds. Choose Add or Cut when the direction does not tell it right.':
+        "Otomatik: katının içine doğru keser, dışına doğru ekler. Yön doğru sonucu vermediğinde Ekle ya da Kes'i seç.",
+    'Drag the arrow: out of the solid adds, into it cuts. Double-click it to flip the direction.':
+        'Oku sürükleyin: katının dışına çekmek ekler, içine itmek keser. Yönü çevirmek için oka çift tıklayın.',
+    'Double-click the arrow to flip the direction.':
+        'Yönü çevirmek için oka çift tıklayın.',
     'Mirror move':
         'Simetrik taşı',
     'Two selected points move symmetrically. The first selected point is the base: the other snaps to its mirror about the loft axis, perpendicular to the view. Rotating the view turns it off':
