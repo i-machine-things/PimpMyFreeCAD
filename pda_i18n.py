@@ -603,6 +603,20 @@ TR = {
         'Magic Pad: yönü seçin (düz bir kenar, düz bir yüz ya da datum ekseni)',
     'Magic Pad: the direction lies in the plane of the face':
         'Magic Pad: yön yüzün düzleminde kalıyor',
+    'Pad and Pocket in one tool. Pull the arrow out of the solid to add, push it in to cut. Up to body stops where the profile first meets the Body; twist and taper. In the Part workbench it makes the pulled solid only, like Extrude':
+        'Pad ve Pocket tek araçta. Oku katının dışına çekmek ekler, içine itmek keser. Gövdeye kadar, profilin gövdeye ilk değdiği yerde durur; burulma ve eğim. Part tezgâhında Extrude gibi yalnız çekilen katıyı üretir',
+    'Magic Pad: select a closed sketch or a flat face.\n':
+        'Magic Pad: kapalı bir sketch ya da düz bir yüz seçin.\n',
+    'Solid':
+        'Katı',
+    'Select a solid':
+        'Bir katı seçin',
+    'Reference':
+        'Referans',
+    'Solid the profile belongs to (not changed): gives the outward side and where the Up to modes stop':
+        'Profilin ait olduğu katı (değişmez): dışarı yönünü ve "kadar" modlarının durduğu yeri belirler',
+    'Pick the solid in the 3D view':
+        'Katıyı 3B görünümde tıklayın',
     'Mirror move':
         'Simetrik taşı',
     'Two selected points move symmetrically. The first selected point is the base: the other snaps to its mirror about the loft axis, perpendicular to the view. Rotating the view turns it off':

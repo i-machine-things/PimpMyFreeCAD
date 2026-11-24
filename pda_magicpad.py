@@ -37,6 +37,44 @@ def _centroid(shape):
     return s * (1.0 / A) if A > 0 else shape.BoundBox.Center
 
 
+def is_part(obj):
+    """Part tezgahindaki Magic Pad mi: Body disinda, Part'in mantigiyla yalniz cekilen katiyi uretir (Extrude gibi;
+    ekleme / kesme Part Fuse / Cut ile). Degilse PartDesign adimi."""
+    return not obj.TypeId.startswith("PartDesign::")
+
+
+def _to_local(obj, o):
+    """o nesnesinin seklini obj'nin koordinatina getiren yerlesim (ayni Body'de birim). Part surumunde profil ve Base
+    baska Body'lerde olabilir."""
+    pl = App.Placement()
+    g = o.getParentGeoFeatureGroup()
+    if g is not None:
+        pl = g.getGlobalPlacement()
+    own = obj.getParentGeoFeatureGroup()
+    if own is not None:
+        pl = own.getGlobalPlacement().inverse().multiply(pl)
+    return pl
+
+
+def _moved_by(sh, pl):
+    if pl.isIdentity():
+        return sh
+    sh = sh.copy()
+    sh.transformShape(pl.toMatrix(), True)
+    return sh
+
+
+def _base(obj):
+    """Ekleme / kesme yapilacak kati: PartDesign'da onceki adim. Part surumunde Reference: degistirilmez, yalniz
+    yonu (disari / iceri) ve "kadar" modlarinin durdugu yeri belirler (yoksa None)."""
+    if not is_part(obj):
+        return rp._base(obj)
+    b = getattr(obj, "Reference", None)
+    if b is None or not hasattr(b, "Shape") or b.Shape.isNull():
+        return None
+    return _moved_by(b.Shape, _to_local(obj, b))
+
+
 def profile(obj):
     """Profil: (yuz, merkez, dis normal, sketch orijini, govdenin uzerinde mi) ya da hata metni. Yuz, sketch'in
     kapali tellerinden (delikler dahil) ya da secilen duz yuzden; govde koordinatinda."""
@@ -44,9 +82,10 @@ def profile(obj):
     if not link or link[0] is None:
         return "Magic Pad: select a closed sketch or a flat face"
     o, subs = link[0], [s for s in (link[1] or []) if s]
+    pl = _to_local(obj, o)
     fsubs = [s for s in subs if s.startswith("Face")]
     if fsubs:                                              # yuz(ler): her biri kendi normaliyle (bkz. _multi_tool)
-        return _multi_profile(o, fsubs)
+        return _multi_profile(o, fsubs, pl, obj)
     try:
         if subs and subs[0].startswith("Face"):
             face = o.Shape.getElement(subs[0])
@@ -57,6 +96,8 @@ def profile(obj):
                 return "Magic Pad: the sketch has no closed profile"
             face = Part.makeFace(wires, "Part::FaceMakerBullseye")
             origin = o.Placement.Base if _sketch(o) else _centroid(face)
+        face = _moved_by(face, pl)
+        origin = pl.multVec(origin)
     except Exception as e:
         return T("Magic Pad: the profile could not be read (%s)") % e
     if face.isNull() or not face.Faces or face.Area <= 1e-12:
@@ -69,11 +110,11 @@ def profile(obj):
         n = f0.normalAt((u0 + u1) / 2, (v0 + v1) / 2)      # kati yuzu: yonelimi disari
         on_body = True
     else:
-        n = o.Placement.Rotation.multVec(V(0, 0, 1)) if _sketch(o) else V(f0.Surface.Axis)
+        n = pl.Rotation.multVec(o.Placement.Rotation.multVec(V(0, 0, 1))) if _sketch(o) else V(f0.Surface.Axis)
         on_body = False
     n.normalize()
     c = _centroid(face)
-    base = rp._base(obj)
+    base = _base(obj)
     if not on_body and base is not None:                   # yuze cizilmis sketch: normal govdenin disina
         q = _outward(face, c, n, base)
         if q is not None:
@@ -83,13 +124,13 @@ def profile(obj):
     return face, c, n, V(origin), on_body
 
 
-def _multi_profile(o, fsubs):
+def _multi_profile(o, fsubs, pl=None, obj=None):
     """Birden cok duz yuz (ornegin ardisik iki yan yuz): her biri kendi dis normaliyle. (yuzlerin bileskesi, ilk yuzun
     merkezi, ilk yuzun normali, ayni merkez, True, [(yuz, merkez, normal), ...]); gizmo ilk yuzde durur."""
     parts = []
     try:
         for sub in fsubs:
-            f = o.Shape.getElement(sub)
+            f = _moved_by(o.Shape.getElement(sub), pl or App.Placement())
             if not isinstance(f.Surface, Part.Plane):
                 return "Magic Pad: the profile must be flat"
             u0, u1, v0, v1 = f.ParameterRange
@@ -341,6 +382,8 @@ def operation(obj, prof=None):
     normali boyunca ekler, katinin icine dogru keser. Ters yon (Reversed) de yonu cevirir: Reversed + pozitif uzunluk
     iceri gider, keser. Ilk / son yuze, yuze, sekle kadar: profilin hemen onu govdenin icindeyse keser, disindaysa
     ekler (iki taraf arasindaki bosluk doldurulur)."""
+    if is_part(obj):                                       # Part: boolean yok, hep cekilen kati
+        return "Union"
     forced = getattr(obj, "OpMode", "Auto")               # elle secim: uc durumlar icin
     if forced == "Add":
         return "Union"
@@ -366,7 +409,7 @@ def _auto_op(obj, prof=None):
         face, c, n, origin, on_body = prof[:5]
         n = direction(obj, prof, n)
         n = -n if obj.Reversed else n
-        base = rp._base(obj)
+        base = _base(obj)
         if base is None or base.isNull():
             return "Union"
         e = 1e-3 * max(face.BoundBox.DiagonalLength, 1.0)
@@ -392,9 +435,9 @@ def interval(obj, base, n, c):
         return 0.0, _far(base, c, n)
     if mode in ("ThroughAll", "UpToBody"):
         far = _far(base, c, n)
-        if mode == "ThroughAll":
-            side = 1.0 if L > 0 else -1.0                  # 0 ya da negatif: iceri
-            return (0.0, far) if side > 0 else (-far, 0.0)
+        if mode == "ThroughAll":                           # hep katinin icine (keser); Ters yon obur yana cevirir.
+            return -far, 0.0                               # Once uzunlugun isaretine bakiyordu: varsayilan 10 mm ile
+                                                           # disari gidip hicbir sey kesmiyordu
         return 0.0, (abs(L) if abs(L) > 1e-9 else far)
     return min(0.0, L), max(0.0, L)
 
@@ -818,7 +861,7 @@ def compute(obj, trim=True, prof=None):
         prof = profile(obj)
     if isinstance(prof, str):
         return T(prof)
-    base = rp._base(obj)
+    base = _base(obj)
     op = operation(obj, prof)
     mode = obj.Mode
     if len(prof) > 5:                                      # birden cok yuz
@@ -873,6 +916,28 @@ OPMODES = ["Auto", "Add", "Cut"]
 SIDES = ["Neighbours", "Perpendicular"]
 
 
+PART_MODES = [m for m in MODES if m != "ThroughAll"]     # Part: kesme yok, Sonuna kadar anlamsiz
+
+
+def part_props(obj):
+    """Part surumu: referans kati (degistirilmez) ve kesmeye ait olmayan mod listesi."""
+    if not is_part(obj):
+        return
+    if "Reference" not in obj.PropertiesList:
+        obj.addProperty("App::PropertyLinkGlobal", "Reference", "Magic Pad",
+                        "Solid the profile belongs to (not changed): gives the outward side and where the Up to modes "
+                        "stop. The result is only the pulled solid; add or cut it with Part Fuse / Cut")
+    if obj.Mode == "ThroughAll":
+        obj.Mode = "Length"
+    if list(obj.getEnumerationsOfProperty("Mode")) != PART_MODES:
+        m = obj.Mode
+        obj.Mode = PART_MODES
+        obj.Mode = m if m in PART_MODES else "Length"
+    for prop in ("OpMode",):
+        if prop in obj.PropertiesList:
+            obj.setEditorMode(prop, 2)
+
+
 def miss_prop(obj):
     if "ExtrudeDir" not in obj.PropertiesList:
         obj.addProperty("App::PropertyEnumeration", "ExtrudeDir", "Magic Pad",
@@ -903,7 +968,8 @@ class MagicPad:
     """Magic Pad (PartDesign::FeatureAddSubPython) Proxy'si."""
 
     def __init__(self, obj):
-        obj.addProperty("App::PropertyLinkSub", "Profile", "Magic Pad", "Closed sketch or flat face")
+        link = "App::PropertyLinkSubGlobal" if is_part(obj) else "App::PropertyLinkSub"   # Part: baska Body'lerden de
+        obj.addProperty(link, "Profile", "Magic Pad", "Closed sketch or flat face")
         obj.addProperty("App::PropertyEnumeration", "Mode", "Magic Pad",
                         "Length: positive adds, negative cuts. Through all cuts, Up to body stops where the "
                         "profile first meets the Body")
@@ -920,10 +986,12 @@ class MagicPad:
         obj.TwistCenter = CENTERS
         obj.addProperty("App::PropertyBool", "TwistEase", "Magic Pad", "Slow turn at the start and the end")
         miss_prop(obj)
+        part_props(obj)
         obj.Proxy = self
 
     def onDocumentRestored(self, obj):
         miss_prop(obj)
+        part_props(obj)
 
     def onChanged(self, obj, prop):
         if prop in ("Length", "Mode", "Reversed", "OpMode") and "Operation" in obj.PropertiesList \
@@ -940,9 +1008,12 @@ class MagicPad:
         if isinstance(res, str):
             raise RuntimeError(res)
         tool, base, op = res
-        if obj.Operation != op:                            # eski dosya / dogrudan degisen ozellik: islem esitlenir
+        if "Operation" in obj.PropertiesList and obj.Operation != op:   # eski dosya / dogrudan degisen ozellik
             obj.Operation = op
-        r = combine(base, tool, op, bool(getattr(obj, "Refine", False)))
+        if is_part(obj):
+            r = tool                                       # Part: yalniz cekilen kati (Extrude gibi)
+        else:
+            r = combine(base, tool, op, bool(getattr(obj, "Refine", False)))
         if isinstance(r, str):
             raise RuntimeError(r)
         if hasattr(obj, "AddSubShape"):
@@ -1016,6 +1087,30 @@ def make(body, prof_obj, subs=None):
         body.Document.removeObject(obj.Name)
         return p
     obj.Refine = App.ParamGet("User parameter:BaseApp/Preferences/Mod/PartDesign").GetBool("RefineModel", True)
+    return obj
+
+
+def make_part(doc, prof_obj, subs=None):
+    """Part tezgahinda Magic Pad: Body disinda, yalniz cekilen kati (Part'in mantigi: ekleme / kesme Part Fuse / Cut
+    ile). Yuz secildiyse o yuzun katisi Reference olur (PartDesign ozelligiyse butun Body): disari yonu ve "kadar"
+    modlari ona gore; degistirilmez, gizlenmez. Nesne ya da hata metni."""
+    obj = doc.addObject("Part::FeaturePython", "MagicPad")
+    MagicPad(obj)
+    obj.Profile = (prof_obj, list(subs or []))
+    if subs:
+        ref = prof_obj
+        g = prof_obj.getParentGeoFeatureGroup()
+        if g is not None and g.isDerivedFrom("PartDesign::Body"):
+            ref = g
+        obj.Reference = ref
+    if App.GuiUp:
+        ViewProviderMagicPad(obj.ViewObject)
+    if prof_obj.Shape.isNull() or "Touched" in prof_obj.State:
+        prof_obj.recompute()
+    p = profile(obj)
+    if isinstance(p, str):
+        doc.removeObject(obj.Name)
+        return p
     return obj
 
 

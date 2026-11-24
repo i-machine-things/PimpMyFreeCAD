@@ -107,6 +107,8 @@ value next to the arrow to type a length; the panel fields take FreeCAD expressi
 - **Several faces:** select neighbouring flat faces (Ctrl) to push or pull them together; each moves along its own normal
   and the corners close sharp. *Side walls* follow the neighbouring faces or stand perpendicular like a Pad.
 - **Direction:** face normal, the average of the selected faces, or a custom straight edge, flat face or datum axis.
+- **Part workbench:** outside a Body, Magic Pad makes only the pulled solid, like Extrude; add or cut it with Part Fuse /
+  Cut. The solid of the selected face is its *Reference* (not changed): the outward side and the Up to modes use it.
 - **Fast:** while you drag there is no boolean, only the volume to add or cut; the lines where it meets the Body appear
   when you release the arrow. The solid is computed on **OK**, one undo step.
 

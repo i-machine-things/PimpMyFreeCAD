@@ -726,6 +726,8 @@ class _TargetPicker(object):
             sub = subs[-1].split(".")[-1] if subs else ""
             if self.panel.pick_kind == "dir":
                 self.panel.set_dir(s.Object, sub)
+            elif self.panel.pick_kind == "base":
+                self.panel.set_base(s.Object)
             else:
                 self.panel.set_target(s.Object, sub)
 
@@ -783,6 +785,20 @@ class Panel(object):
         self.pick.toggled.connect(self._pick_toggled)
         self.observer = None
         self.pick_kind = None
+        self.bpick = QtWidgets.QPushButton(T("Select..."))
+        self.bpick.setCheckable(True)
+        self.bpick.setToolTip(T("Solid the profile belongs to (not changed): gives the outward side and where the Up "
+                                "to modes stop"))
+        self.blabel = QtWidgets.QLabel()
+        self.blabel.setWordWrap(True)
+        bw = QtWidgets.QWidget()
+        bl = QtWidgets.QHBoxLayout(bw)
+        bl.setContentsMargins(0, 0, 0, 0)
+        bl.addWidget(self.bpick)
+        bl.addWidget(self.blabel, 1)
+        self.b_label = QtWidgets.QLabel(T("Reference"))
+        f.addRow(self.b_label, bw)
+        self.bpick.toggled.connect(self._bpick_toggled)
         self.rev = QtWidgets.QCheckBox(T("Reversed"))
         f.addRow(self.rev)
         self.opmode = QtWidgets.QComboBox()
@@ -791,7 +807,8 @@ class Panel(object):
         self.opmode.addItem(T("Cut"), "Cut")
         self.opmode.setToolTip(T("Auto: into the solid cuts, out of it adds. Choose Add or Cut when the direction "
                                  "does not tell it right."))
-        f.addRow(T("Operation"), self.opmode)
+        self.opmode_label = QtWidgets.QLabel(T("Operation"))
+        f.addRow(self.opmode_label, self.opmode)
         self.dirmode = QtWidgets.QComboBox()
         self.dirmode.addItem(T("Face normal"), "Normal")
         self.dirmode.addItem(T("Average of the faces"), "Average")
@@ -929,6 +946,17 @@ class Panel(object):
         if not tgt and self.pick_kind == "target":
             self.pick_off()
         self.target.setText(self._target_text())
+        part = mp.is_part(o)
+        for wdg in (self.bpick, self.blabel, self.b_label):
+            wdg.setVisible(part)
+        self.opmode.setVisible(not part)                   # Part: boolean yok, hep cekilen kati
+        self.opmode_label.setVisible(not part)
+        k = self.mode.findData("ThroughAll")
+        if k >= 0:
+            self.mode.model().item(k).setEnabled(not part)
+        b = getattr(o, "Reference", None)
+        if self.pick_kind != "base":
+            self.blabel.setText(b.Label if b is not None else T("(none)"))
         faces = self._face_profile()
         custom = getattr(o, "ExtrudeDir", "Normal") == "Custom"
         self.dpick.setVisible(custom)
@@ -994,7 +1022,7 @@ class Panel(object):
     def _start_pick(self, kind, label):
         self.pick_off()
         self.pick_kind = kind
-        btn = self.pick if kind == "target" else self.dpick
+        btn = {"target": self.pick, "dir": self.dpick, "base": self.bpick}[kind]
         btn.blockSignals(True)
         btn.setChecked(True)
         btn.blockSignals(False)
@@ -1010,6 +1038,33 @@ class Panel(object):
         else:
             self.pick_off()
             self.target.setText(self._target_text())
+
+    def _bpick_toggled(self, on):
+        if on:
+            self._start_pick("base", self.blabel)
+            self.blabel.setText(T("Pick the solid in the 3D view"))
+        else:
+            self.pick_off()
+            self.sync()
+
+    def set_base(self, o):
+        """Part surumu: referans kati (PartDesign ozelligi secildiyse butun Body); degistirilmez, gizlenmez."""
+        g = o.getParentGeoFeatureGroup()
+        if g is not None and g.isDerivedFrom("PartDesign::Body"):
+            o = g
+        obj = self.ed.obj
+        if o == obj or not hasattr(o, "Shape") or not o.Shape.Solids:
+            self.blabel.setText(T("Select a solid"))
+            return
+        try:
+            obj.Reference = o
+        except Exception as e:
+            self.blabel.setText(str(e))
+            return
+        self.pick_off()
+        Gui.Selection.clearSelection()
+        self.sync()
+        self.ed.refresh()
 
     def _dpick_toggled(self, on):
         if on:
@@ -1041,7 +1096,7 @@ class Panel(object):
             self.observer = None
             self.ed.picking(False)
         self.pick_kind = None
-        for b in (getattr(self, "pick", None), getattr(self, "dpick", None)):
+        for b in (getattr(self, "pick", None), getattr(self, "dpick", None), getattr(self, "bpick", None)):
             if b is not None and b.isChecked():
                 b.blockSignals(True)
                 b.setChecked(False)

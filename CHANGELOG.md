@@ -19,6 +19,12 @@
 - **Several faces at once:** select neighbouring flat faces of the Body (Ctrl) and push or pull them together. Each face
   moves along its own normal and the corners between them close sharp, like pushing faces in other CAD systems. *Side
   walls* follow the unselected neighbouring faces (default) or stand perpendicular like a Pad.
+- **Part workbench:** Magic Pad also works outside a Body, in the Part way: it makes only the pulled solid, like Extrude
+  (add or cut it with Part Fuse / Cut). The solid of the selected face becomes the *Reference* (not changed, not
+  hidden; a face of a PartDesign Body uses the whole Body): it gives the outward side and where the Up to modes stop.
+  Cut options and Through all are not offered there. Profiles and targets can come from other Bodies.
+- **Through all** always goes into the solid (cuts); *Reversed* turns it to the other side. Before, it followed the sign of
+  the length and with the default 10 mm went outwards and cut nothing.
 - **Direction:** the face normal, the average normal of the selected faces, or a custom direction from a straight edge, a
   flat face or a datum axis (also for sketches). While a target or an axis is being picked the preview is hidden, so the
   faces and edges behind it can be clicked.

@@ -142,8 +142,9 @@ class _MagicLoft:
         for p in prof + guides:                            # PartDesign gibi: kullanilan sketch'ler gizlenir
             if not p[1] and hasattr(p[0], "ViewObject") and p[0].ViewObject is not None:
                 p[0].ViewObject.Visibility = False
-        if getattr(new, "BaseFeature", None) is not None and "Invalid" not in new.State:
-            new.BaseFeature.ViewObject.Visibility = False
+        base = getattr(new, "BaseFeature", None)          # Part: referans kati gizlenmez (degismiyor)
+        if base is not None and "Invalid" not in new.State:
+            base.ViewObject.Visibility = False
             new.ViewObject.Visibility = True
         doc.commitTransaction()
         Gui.Selection.clearSelection()
@@ -160,8 +161,9 @@ class _MagicPad:
 
     def GetResources(self):
         return {"Pixmap": os.path.join(ICONS, "pda_magicpad.svg"), "MenuText": T("Magic Pad"),
-                "ToolTip": T("PartDesign: Pad and Pocket in one tool. Pull the arrow out of the solid to add, push it in "
-                             "to cut. Up to body stops where the profile first meets the Body; twist and taper")}
+                "ToolTip": T("Pad and Pocket in one tool. Pull the arrow out of the solid to add, push it in to cut. "
+                             "Up to body stops where the profile first meets the Body; twist and taper. In the Part "
+                             "workbench it makes the pulled solid only, like Extrude")}
 
     def IsActive(self):
         return App.ActiveDocument is not None
@@ -179,15 +181,15 @@ class _MagicPad:
                 prof = so.Object
                 break
         if prof is None:
-            App.Console.PrintWarning(T("Magic Pad: select a closed sketch or a flat face of the Body.\n"))
+            App.Console.PrintWarning(T("Magic Pad: select a closed sketch or a flat face.\n"))
             return
         body = prof.getParentGeoFeatureGroup()
-        if body is None or body.TypeId != "PartDesign::Body":
-            App.Console.PrintWarning(T("Magic Pad: the sketch or face must belong to a PartDesign Body.\n"))
-            return
+        in_body = body is not None and body.TypeId == "PartDesign::Body"
+        # Part tezgahinda (ya da profil bir Body'de degilse): Body disinda, Base katisini degistiren Magic Pad
+        part = _workbench() == "PartWorkbench" or not in_body
         doc = prof.Document
         doc.openTransaction(T("Magic Pad"))
-        new = pda_magicpad.make(body, prof, subs)
+        new = pda_magicpad.make_part(doc, prof, subs) if part else pda_magicpad.make(body, prof, subs)
         if isinstance(new, str):
             doc.abortTransaction()
             App.Console.PrintWarning(T(new) + "\n")
@@ -195,8 +197,9 @@ class _MagicPad:
         doc.recompute()
         if not subs and hasattr(prof, "ViewObject") and prof.ViewObject is not None:
             prof.ViewObject.Visibility = False
-        if getattr(new, "BaseFeature", None) is not None and "Invalid" not in new.State:
-            new.BaseFeature.ViewObject.Visibility = False
+        base = getattr(new, "BaseFeature", None)          # Part: referans kati gizlenmez (degismiyor)
+        if base is not None and "Invalid" not in new.State:
+            base.ViewObject.Visibility = False
             new.ViewObject.Visibility = True
         doc.commitTransaction()
         Gui.Selection.clearSelection()
