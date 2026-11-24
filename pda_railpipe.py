@@ -502,53 +502,53 @@ def _volume_ok(base, tool, res, sub, rel=0.005):
 
 def _combine(base, tool, sub, refine, fuzzy=0.0):
     """Boruyu govdeye ekle / govdeden oy: (sonuc, temiz mi) ya da gecersizse None. fuzzy > 0: boolean toleransi (Magic
-    Loft). Boolean yalniz borunun kutusuna
-    giren katilarla yapilir, digerleri oldugu gibi kalir: ayni Body'de birbirine degmeyen her yeni boru butun
-    govdeyle birlestirilip refine / hacim denetiminden geciyordu (motor-test: 4. boru 20 s). Temiz: hacim tutuyor
-    ve hicbir kati bolunmedi (degmeyen yeni boru ayri kati olur, bu bolunme sayilmaz)."""
+    Loft). Boolean butun govdeyle yapilir, FreeCAD'in Pad'i gibi: once yalniz boruya degen katilarla yapilip obur
+    katilar sonradan eklenince cok katili govdede butun yuz adlari degisiyordu (TNP: boru baska bir katiya degince
+    bagli sketch / fillet kopardi). Hiz icin yalniz denetim (gecerlilik, hacim) boruya degen katilarla yapilir: degmeyen
+    katilar boolean'dan aynen (ayni TShape) cikar. Temiz: hacim tutuyor ve hicbir kati bolunmedi (degmeyen yeni boru
+    ayri kati olur, bu bolunme sayilmaz)."""
     if base is None:
         return (tool, True) if tool.isValid() else None
+    # kopyalar: boolean girdinin toleranslarini yerinde buyutebiliyor, basarisiz deneme bile onceki adimin seklini
+    # kalici bozuyordu (Pad'de 34 mm kose toleransi, sonraki denemeler ve STEP de bozuluyordu). copy adlari korur.
+    whole = base.copy()
+    tool = tool.copy()
     box = tool.BoundBox                                    # kontrol noktalarina gore: gercek sekilden genis, guvenli
     box.enlarge(1e-3 * max(box.DiagonalLength, 1.0))
     near, far = [], []
-    for s in base.Solids:                                  # kutu kesisse de gercekte degmeyen kati (kavisli borular
-        try:                                               # yelpazesi) boolean'a girmez
+    for s in whole.Solids:                                 # kutu kesisse de gercekte degmeyen kati (kavisli borular
+        try:                                               # yelpazesi) denetime girmez
             hit = s.BoundBox.intersect(box) and s.distToShape(tool)[0] <= 1e-6
         except Exception:
             hit = True
         (near if hit else far).append(s)
+    if fuzzy > 0:
+        r = whole.cut(tool, fuzzy) if sub else whole.fuse(tool, fuzzy)
+    else:
+        r = whole.cut(tool) if sub else whole.fuse(tool)
+    changed = [s for s in r.Solids if not any(s.isSame(f) for f in far)]
+    if not all(s.isValid() for s in changed) or (not r.Solids and not sub):
+        return None
     if near:
-        # kopyalar: boolean girdinin toleranslarini yerinde buyutebiliyor, basarisiz deneme bile onceki adimin seklini
-        # kalici bozuyordu (Pad'de 34 mm kose toleransi, sonraki denemeler ve STEP de bozuluyordu)
-        part = (near[0] if len(near) == 1 else Part.makeCompound(near)).copy()
-        tool = tool.copy()
-        if fuzzy > 0:
-            r = part.cut(tool, fuzzy) if sub else part.fuse(tool, fuzzy)
-        else:
-            r = part.cut(tool) if sub else part.fuse(tool)
-        if refine:
-            r = r.removeSplitter()
-        if not r.isValid() or (not r.Solids and not sub):
-            return None
+        part = near[0] if len(near) == 1 else Part.makeCompound(near)
         try:
             a, b = part.copy(), tool.copy()
             common = a.common(b, fuzzy).Volume if fuzzy > 0 else a.common(b).Volume
         except Exception:
             return None
         want = part.Volume - common if sub else part.Volume + tool.Volume - common
-        if abs(r.Volume - want) > 0.005 * max(part.Volume, tool.Volume, 1e-9):
+        got = sum(s.Volume for s in changed)
+        if abs(got - want) > 0.005 * max(part.Volume, tool.Volume, 1e-9):
             return None
         touched = common > 1e-9 * max(tool.Volume, 1e-9)
-        clean = len(r.Solids) <= len(near) + (0 if sub or touched else 1)
-        solids = far + r.Solids
+        clean = len(changed) <= len(near) + (0 if sub or touched else 1)
     else:                                                  # boru hicbir kati ile kesismiyor
-        if not tool.isValid():
-            return None
         clean = True
-        solids = far if sub else far + [tool]
-    if not solids:
+    if refine:
+        r = r.removeSplitter()
+    if not r.Solids:
         return None
-    return (solids[0] if len(solids) == 1 else Part.makeCompound(solids)), clean
+    return r, clean
 
 
 def _bop_clean(sh):

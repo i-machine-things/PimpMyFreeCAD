@@ -29,6 +29,14 @@
   length and profile changes. Turning twist or taper on or off rebuilds the side faces and can break fillets attached to
   them (noted in the panel).
 
+### Rail Pipe and Magic Loft
+
+- **Topological naming in Bodies with several solids:** the boolean was done only with the solids the pipe touches and
+  the other solids were added back afterwards, so every face name of the result changed and sketches or fillets on
+  another solid could break when the pipe reached or left a solid. The boolean now runs on the whole Body like
+  FreeCAD's Pad (names identical to FreeCAD's own); only the validity and volume checks are limited to the touched
+  solids, so it stays fast.
+
 ### Matcap
 
 - *Matcap with FreeCAD lights* did not follow later changes of the light preferences in FreeCAD 26.3: watching the
