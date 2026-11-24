@@ -23,6 +23,7 @@ WALL_DEG = 30.0             # butun komsular en az bu kadar egimliyse kubbe duva
 ROW_TOL = 2e-3              # duvar boyunca orta sira: yukseklik basina izin verilen sapma
 MAX_ROW_TRIES = 6           # orta sira uydurma: en cok bu kadar deneme (her birinde dugum sayisi ikiye katlanir)
 MAX_ROW_POLES = 300         # ...ve kenar basina en cok bu kadar kontrol noktasi
+RIDGE_RATIO = 1.6          # uzunluk / genislik bunun ustundeyse tepe tek nokta degil, ortadan gecen bir sirt
 CORNER_DEG = 10.0         # kenar birlesiminde bu acinin ustu kosedir: egim koseye dogru sifira iner
 CELLS = (40, 56)            # kenar boslugu buyukse ikinci, ince izgara
 GAP_OK = 1e-3               # mm
@@ -331,10 +332,24 @@ def can_ellipse(face, shape):
     return c if (turn > 1e-6 * size).all() or (turn < -1e-6 * size).all() else None
 
 
+_WALL = {}                  # duvar normali onbellegi: (yuz, nokta) -> normal. Orta sira her denemede ayni noktalari
+                            # yeniden soruyordu; f.Surface her cagrida yuzeyi kopyaliyor. Kubbe suresinin %85'i buydu.
+
+
 def _wall_normal(f, p):
-    m = f.normalAt(*f.Surface.parameter(p))
-    m.normalize()
-    return m
+    hk = (f.hashCode(), f.Orientation)
+    ent = _WALL.get(hk)
+    if ent is None or not ent[0].isSame(f):
+        if len(_WALL) > 64:
+            _WALL.clear()
+        ent = _WALL[hk] = (f, f.Surface, {})
+    key = (round(p.x, 9), round(p.y, 9), round(p.z, 9))
+    m = ent[2].get(key)
+    if m is None:
+        m = f.normalAt(*ent[1].parameter(p))
+        m.normalize()
+        ent[2][key] = m
+    return V(m)
 
 
 def _up_along(a, b, n):
@@ -365,6 +380,22 @@ def _corner_dirs(face, shape, n):
     return out
 
 
+def _fit_params(cv, per=6):
+    """En kucuk kareler icin ornek parametreleri: her dugum araligina en az `per` nokta. Esit aralikli ornekte sik
+    dugumlu (mahya dugumleri eklenmis) parcada bazi araliklara hic nokta dusmuyor, kutuplar serbest kalip egri
+    650 mm'lik dalgaya donuyordu."""
+    k = [x for x in cv.getKnots() if cv.FirstParameter - 1e-12 <= x <= cv.LastParameter + 1e-12]
+    k = sorted(set([cv.FirstParameter] + k + [cv.LastParameter]))
+    ts = [cv.FirstParameter]
+    for a, b in zip(k[:-1], k[1:]):
+        if b - a > 1e-12:
+            ts += list(np.linspace(a, b, per + 1)[1:])
+    ts = np.array(ts)
+    if len(ts) < max(24, 3 * cv.NbPoles):
+        ts = np.union1d(ts, np.linspace(cv.FirstParameter, cv.LastParameter, max(24, 3 * cv.NbPoles)))
+    return ts
+
+
 def _rational_basis(cv, ts):
     """Egrinin kendi (rasyonel) tabani: ts noktalarinda satir basina kontrol noktalari."""
     knots, deg = np.array(cv.KnotSequence), cv.Degree
@@ -385,26 +416,29 @@ def _rational_basis(cv, ts):
     return R / R.sum(axis=1)[:, None]
 
 
-def _wall_row(cv, f, n, height, sign, span, c0, c1, joints):
+def _wall_row(cv, f, n, height, sign, span, c0, c1, joints, full=None):
     """Orta sira kontrol noktalari: kenarin her noktasi duvar boyunca tepe duzlemine cikar. Yuzeyin kenardaki tegeti bu
     yondedir. Duz duvarda iki kose yonu arasinda dogrusal kalir, bu yuzden duvar duzleminden cikmaz."""
     a, b = span
-    ts = np.linspace(cv.FirstParameter, cv.LastParameter, max(24, 3 * cv.NbPoles))
+    ts = _fit_params(cv)
     Q, ends = [], {}
 
-    def steep(t):
-        p = cv.value(t)
-        d = _wall_normal(f, p).cross(cv.tangent(t)[0])
+    def steep(t, curve=cv):
+        p = curve.value(t)
+        d = _wall_normal(f, p).cross(curve.tangent(t)[0])
         return p, d * (1.0 / d.dot(n))
-    for key, t, c in (("a", a, c0), ("b", b, c1)):         # uc farklari kenarin tam parametresinde
-        ends[key] = V(0, 0, 0) if c is None else c - steep(t)[1]
+    for key, t, c in (("a", a, c0), ("b", b, c1)):         # uc farklari kenarin tam parametresinde; parca (cv) kenarin
+        # yalniz bir bolumu olabilir: ucta kenarin kendi egrisi (cv'nin disinda deger uydurma kontrol noktasini 80 mm
+        # firlatiyordu, sirtli kubbe twistli elipste "wall passes the centre")
+        ends[key] = V(0, 0, 0) if c is None else c - steep(t, full or cv)[1]
     for t in ts:
         p, d = steep(float(t))
         s = (float(t) - a) / (b - a)
         d = d + ends["a"] * (1.0 - s) + ends["b"] * s
         m = _wall_normal(f, p)                             # kavisli duvarda kose duzeltmesi duvardan cikmasin
         d = d - m * d.dot(m)
-        Q.append(tuple(p + d * (sign * height / d.dot(n))))
+        h = height(p) if callable(height) else height
+        Q.append(tuple(p + d * (sign * h / d.dot(n))))
     Q = np.array(Q)
     R = _rational_basis(cv, ts)
     # uclar tam: komsu yamayla sirt ayni olmali. Yaklasik uc (agirlikli en kucuk kareler) dikisi tutmuyor, kati gecersiz
@@ -420,10 +454,303 @@ def _wall_row(cv, f, n, height, sign, span, c0, c1, joints):
     return [V(*(float(x) for x in r)) for r in sol], float(np.abs(R.dot(sol) - Q).max())
 
 
-def ellipse_patches(face, shape, center, height, sign):
-    """Her kenar icin bir yama: kenardan duvar boyunca cikip tepeye ceyrek konik ile varir. Yay ve egri carpimi NURBS:
-    sinir kenarin kendisi, dik duvarda yuzey tam. Yamalar tepede tek noktada bulusur; keskin kose tepeye kadar sirt olarak
-    gider. Duvar o kadar yatik ki kenar merkezi gecerse ValueError."""
+CAGE_K = 0.5523             # kubik ceyrek daire: teget sira duvar boyunca h*K, tepe sirasi sirta dogru D*K
+RIDGE_PTS = 25              # sirt kirik cizgisinin nokta sayisi (profilin orta cizgisini izler)
+RIDGE_DENSE = 31            # mahya egrisinin ara nokta sayisi (uca dogru sik)
+RIDGE_CUTS = 12             # mahya boyunca yama sayisi (her yanda): mahya artik egri, araliklari egri dolduruyor
+RIDGE_EVEN = 0.5            # 0: kosinus (uclarda cok sik, ucta milimetrelik yama), 1: esit; arasi: egimde biraz sik
+RIDGE_ENDS = (0.0, 0.06, 0.1, 0.15, 0.25, 0.35, 0.5)   # sirt uclari profilin ucundan bu kadar genislik iceride: once yakin (uc yamasi kisa,
+                                 # katlanma az); yatik duvarda orta sira sirti gecerse daha iceriden denenir
+
+
+class _Ridge(object):
+    """Tepe sirti: profilin uzun ekseni u boyunca s in [sa, sb]; her s'de profilin ortasindan gecen kirik cizgi
+    (kanat gibi kavisli profilde duz eksen uca dogru kenara yaklasiyordu)."""
+
+    def __init__(self, center, u, v, ss, off, rise=None):
+        self.c, self.u, self.v = center, u, v
+        self.ss, self.off = list(ss), list(off)
+        self.rs = list(rise) if rise is not None else [1.0] * len(self.ss)
+        self.sa, self.sb = self.ss[0], self.ss[-1]
+        mid, half = 0.5 * (self.sa + self.sb), 0.5 * (self.sb - self.sa)
+        k = np.linspace(0.0, 1.0, RIDGE_CUTS + 1)
+        self.cuts = [float(mid - half * ((1.0 - RIDGE_EVEN) * np.cos(np.pi * x) + RIDGE_EVEN * (1.0 - 2.0 * x)))
+                     for x in k]
+        # mahya profilin ucuna iniyorsa son dilim tek bir kapak yamasi (kullanicinin fikri): burun boyunca kenar, ilk
+        # bolmedeki mahya noktasinda tek tepeye kapanir. Once mahya uca kadar iniyordu: burundaki dik inis iki yanin
+        # yamalari arasinda kirisik, dikis, gobek yapiyordu. Mahya egrisi [lo, hi] arasinda.
+        self.cap = self.rs[0] == 0.0 and len(self.cuts) > 3
+        self.lo, self.hi = (self.cuts[1], self.cuts[-2]) if self.cap else (self.sa, self.sb)
+
+    def rise(self, s):
+        """Sirtin bu noktadaki yuksekligi / kubbe yuksekligi: yandan bakinca da kubbe (uclara dogru alcalir)."""
+        if getattr(self, "curve", None) is not None:
+            return (self.curve.value(min(self.hi, max(self.lo, s))) - self.c).dot(self.n) / self.hs
+        return float(np.interp(s, self.ss, self.rs))
+
+    def build(self, n, hs):
+        """Mahya egrisi: sirt noktalarindan gecen kubik B-spline (parametre = s). Once kirik cizgiydi; yandan ve ustten
+        bakinca her parca duz, uclarda kose gibi duruyordu (kullanici: "mahya cizgileri egri olsun")."""
+        self.n, self.hs = n, hs
+        # seyrek noktalardan gecen spline ucta (yarim elipsin dik indigi yer) dalgalaniyordu: yandan bakinca ucta
+        # gobek. Sik (uca dogru daha sik) noktalar, yukseklik elipsin kendisinden, kayma yumusak egriden.
+        oc = Part.BSplineCurve()
+        oc.interpolate(Points=[V(float(s), float(o), 0.0) for s, o in zip(self.ss, self.off)],
+                       Parameters=[float(x) for x in self.ss])
+        mid, half = getattr(self, "rmid", None), getattr(self, "rhalf", None)
+        k = np.linspace(0.0, np.pi, RIDGE_DENSE)
+        ss = 0.5 * (self.lo + self.hi) - 0.5 * (self.hi - self.lo) * np.cos(k)
+        pts = []
+        for x in ss:
+            x = float(x)
+            r = (float(np.sqrt(max(1.0 - ((x - mid) / half) ** 2, 0.0))) if mid is not None
+                 else float(np.interp(x, self.ss, self.rs)))
+            pts.append(self.c + self.u * x + self.v * oc.value(x).y + n * (hs * r))
+        if mid is not None and self.rs[0] == 0.0 and not self.cap:
+            pts[0] = self.c + self.u * self.sa + self.v * self.off[0]
+            pts[-1] = self.c + self.u * self.sb + self.v * self.off[-1]
+        c = Part.BSplineCurve()
+        c.interpolate(Points=pts, Parameters=[float(x) for x in ss])
+        self.curve = c
+
+    def top(self, s):
+        """Mahya uzerindeki nokta (yukseklik dahil)."""
+        return self.curve.value(min(self.hi, max(self.lo, s)))
+
+    def slope(self, s):
+        """Mahya yuksekliginin s'e gore egimi (uclarda tek yanli)."""
+        e = 1e-3 * (self.hi - self.lo)
+        a, b = max(self.lo, s - e), min(self.hi, s + e)
+        return (self.top(b) - self.top(a)).dot(self.n) / (b - a)
+
+    def s_of(self, p):
+        return min(self.hi, max(self.lo, (p - self.c).dot(self.u)))
+
+    def at(self, s):
+        return self.c + self.u * s + self.v * float(np.interp(s, self.ss, self.off))
+
+
+def _tips(face, center, u):
+    """Profilin u ekseni boyunca en uc iki noktasi (tam, kenar egrisinde): [(s, nokta), (s, nokta)] (en kucuk, en buyuk)."""
+    best = []
+    for sgn in (1.0, -1.0):
+        cand = None
+        for e in face.Edges:
+            a, b = e.FirstParameter, e.LastParameter
+            ts = np.linspace(a, b, 600)
+            vals = [sgn * (e.valueAt(float(t)) - center).dot(u) for t in ts]
+            k = int(np.argmin(vals))
+            lo, hi = float(ts[max(k - 1, 0)]), float(ts[min(k + 1, len(ts) - 1)])
+            f = lambda t: sgn * (e.valueAt(t) - center).dot(u)
+            for _ in range(60):                            # uclu arama: egrinin gercek ucu
+                m1, m2 = lo + (hi - lo) / 3.0, hi - (hi - lo) / 3.0
+                if f(m1) < f(m2):
+                    hi = m2
+                else:
+                    lo = m1
+            t = 0.5 * (lo + hi)
+            if cand is None or f(t) < cand[0]:
+                cand = (f(t), e.valueAt(t))
+        best.append((sgn * cand[0], cand[1]))
+    return best
+
+
+def _ridge(face, center, n, end=0.5):
+    """Uzun profilde tepe sirti (_Ridge) ya da None. Sirt uclardan yarim genislik iceride biter. Tek tepe noktasinda uzun
+    ve sivri profil (kanat, ucta egrilik yaricapi 1.6 mm) tepeye yakin katlaniyordu: twistli duvarin egimi ucun iki
+    yaninda ters donuyor, tek noktaya giden yama bunu tasiyamiyor. Yuvarlak profil (daire, kare) eskisi gibi tek tepe."""
+    P = []
+    for e in face.Edges:
+        P += [tuple(p - center) for p in e.discretize(400)]
+    P = np.array(P)
+    nn = np.array(tuple(n))
+    P = P - np.outer(P.dot(nn), nn)
+    w, vecs = np.linalg.eigh(P.T.dot(P))
+    u = vecs[:, np.argmax(w)]
+    v = np.cross(nn, u)
+    a, b = P.dot(u), P.dot(v)
+    L, W = a.max() - a.min(), b.max() - b.min()
+    if L < RIDGE_RATIO * W:
+        return None
+    U, Vv = V(*(float(x) for x in u)), V(*(float(x) for x in v))
+    win = 0.5 * L / RIDGE_PTS
+    sa, sb = a.min() + end * W, a.max() - end * W
+    tips = None
+    if end <= 0.0:                                         # mahya profilin en ucundan baslar (kullanicinin onerisi):
+        tips = _tips(face, center, U)                      # uc yamasi kalmaz, kemer kenara kadar iner, sureklilik
+        sa, sb = tips[0][0], tips[1][0]                    # kesilmez
+    for _ in range(20):
+        if sb - sa < 1e-3 * L:
+            return None
+        # uclara dogru sik (kosinus araligi): boyuna yarim elips uclarda hizla iniyor, seyrek noktada pah gibi duruyordu
+        ss = 0.5 * (sa + sb) - 0.5 * (sb - sa) * np.cos(np.linspace(0.0, np.pi, RIDGE_PTS))
+        off = []
+        for t in ss:
+            sel = np.abs(a - t) < win
+            off.append(0.5 * (b[sel].min() + b[sel].max()) if sel.any() else 0.0)
+        if tips is not None:
+            off[0], off[-1] = (tips[0][1] - center).dot(Vv), (tips[1][1] - center).dot(Vv)
+            mid, half = 0.5 * (sa + sb), 0.5 * (sb - sa)
+        else:
+            mid, half = 0.5 * (a.max() + a.min()), 0.5 * L
+        rise = [float(np.sqrt(max(1.0 - ((t - mid) / half) ** 2, 0.0))) for t in ss]   # boyuna yarim elips
+        if tips is not None:
+            rise[0] = rise[-1] = 0.0
+        r = _Ridge(center, U, Vv, ss, off, rise)
+        r.rmid, r.rhalf = mid, half
+        tol = 1e-4 * L if tips is not None else 1e-6
+        if all(face.isInside(r.at(float(t)), tol, True) for t in np.linspace(sa, sb, 4 * RIDGE_PTS)):
+            return r
+        if tips is not None:
+            return None
+        m = 0.05 * (sb - sa)                               # sirt profilin icinde kalsin
+        sa, sb = sa + m, sb - m
+    return None
+
+
+def _split_at(cv, ts):
+    """Egriyi verilen parametrelerde parcalara ayirir."""
+    a, b = cv.FirstParameter, cv.LastParameter
+    cuts = [a] + sorted(t for t in ts if a + 1e-9 < t < b - 1e-9) + [b]
+    out = []
+    for p, q in zip(cuts[:-1], cuts[1:]):
+        if q - p < 1e-9:
+            continue
+        c = cv.copy()
+        c.segment(p, q)
+        out.append(c)
+    return out
+
+
+def _ridge_spans(face, ridge):
+    """Sirtli kubbe icin kenar parcalari: [(kenar, egri)]. Her parca sirtin tek bir duz [s_k, s_k+1] araligina iner; iki
+    yandaki yamalarin ust kenarlari ayni araliklar olsun diye butun parcalar ayni s degerlerinde bolunur (yoksa sirtta T
+    birlesimi, kabuk kapanmaz). Bolme yerleri: sirtin kirik noktalari, parca uclarinin izleri, izin dondugu yerler."""
+    proj = ridge.s_of
+    spans = [(e, cv) for e in face.Edges for cv in _smooth_spans(e)]
+    must = {round(ridge.lo, 9), round(ridge.hi, 9)}         # zorunlu: kenar uclarinin izleri, izin dondugu yerler
+    for e, cv in spans:
+        x = (cv.value(cv.FirstParameter) - ridge.c).dot(ridge.u)
+        if ridge.lo <= x <= ridge.hi:                      # kapak bolgesindeki kenar ucu mahyayi bolmez
+            must.add(round(proj(cv.value(cv.FirstParameter)), 9))
+        ts = np.linspace(cv.FirstParameter, cv.LastParameter, 400)
+        raw = np.array([(cv.value(float(t)) - ridge.c).dot(ridge.u) for t in ts])
+        for k in range(1, len(ts) - 1):
+            if (raw[k] - raw[k - 1]) * (raw[k + 1] - raw[k]) < 0 and ridge.lo < raw[k] < ridge.hi:
+                must.add(round(float(raw[k]), 9))
+    S = set(must)
+    cuts = ridge.cuts                                      # duzenli bolmeler: zorunlu bir bolmeye cok yakinsa atlanir
+    for k in range(1, len(cuts) - 1):                      # (yan yana iki cizgi, milimetrelik ince yama olmasin)
+        gap = 0.4 * min(cuts[k] - cuts[k - 1], cuts[k + 1] - cuts[k])
+        if all(abs(cuts[k] - m) > gap for m in must):
+            S.add(round(cuts[k], 9))
+    S = sorted(S)
+    out = []
+    raw = lambda p: (p - ridge.c).dot(ridge.u)             # kirpilmamis iz: sirt ucunu (sa / sb) gecis de bolunur
+    for e, cv in spans:
+        ts = np.linspace(cv.FirstParameter, cv.LastParameter, 400)
+        g = [raw(cv.value(float(t))) for t in ts]
+        cut = []
+        for sv in S:
+            for k in range(len(ts) - 1):
+                if (g[k] - sv) * (g[k + 1] - sv) < 0:
+                    lo, hi = float(ts[k]), float(ts[k + 1])
+                    for _ in range(50):
+                        mid = 0.5 * (lo + hi)
+                        if (raw(cv.value(lo)) - sv) * (raw(cv.value(mid)) - sv) <= 0:
+                            hi = mid
+                        else:
+                            lo = mid
+                    cut.append(0.5 * (lo + hi))
+        span = ridge.sb - ridge.sa                         # uc noktalar (iz donuyor, sa / sb): tam orada bolunur
+        for k in (range(1, len(ts) - 1) if not ridge.cap else ()):   # kapakta burun tek parca kalir
+            if (g[k] - g[k - 1]) * (g[k + 1] - g[k]) < 0 and min(abs(g[k] - ridge.sa), abs(g[k] - ridge.sb)) < 0.02 * span:
+                sgn = 1.0 if g[k] > g[k - 1] else -1.0     # tepe (+) ya da dip (-)
+                lo, hi = float(ts[k - 1]), float(ts[k + 1])
+                f = lambda t: -sgn * raw(cv.value(t))
+                for _ in range(60):
+                    m1, m2 = lo + (hi - lo) / 3.0, hi - (hi - lo) / 3.0
+                    if f(m1) < f(m2):
+                        hi = m2
+                    else:
+                        lo = m1
+                cut.insert(0, 0.5 * (lo + hi))
+        keep = []                                          # ucta iki bolme ust uste (s gecisi + uc noktasi): mikron
+        for t in cut:                                      # boyunda sivri yama olusuyordu; uc noktasi kalir
+            if all(cv.value(t).distanceToPoint(cv.value(k)) > 0.05 for k in keep):
+                keep.append(t)
+        out += [(e, c) for c in _split_at(cv, keep)]
+    return out
+
+
+def _top_row(cv, ridge, n, sign, height):
+    """Yamanin ust sirasi: sirtin duz bir parcasi uzerinde, egri parcasinin uclarinin izleri arasinda sirali noktalar
+    (ust kenar tam o aralik, iki yandaki yamalarla ayni)."""
+    P = cv.getPoles()
+    s0, s1 = ridge.s_of(cv.value(cv.FirstParameter)), ridge.s_of(cv.value(cv.LastParameter))
+    lo, hi = min(s0, s1), max(s0, s1)
+    ss = [min(hi, max(lo, ridge.s_of(p))) for p in P]
+    ss[0], ss[-1] = s0, s1
+    for k in range(1, len(ss)):                            # tek yonlu: ust kenar araligin disina tasmasin, geri donmesin
+        ss[k] = max(ss[k], ss[k - 1]) if s1 >= s0 else min(ss[k], ss[k - 1])
+    return [ridge.at(x) + n * (sign * height * ridge.rise(x)) for x in ss]
+
+
+def _ridge_knots(cv, ridge):
+    """Mahya egrisinin dugumleri yamanin icinde kalabilir: ayni yere tabana dugum (C2) eklenir, ust sira tam olur."""
+    a, b = cv.FirstParameter, cv.LastParameter
+    raw = lambda p: min(ridge.hi, max(ridge.lo, (p - ridge.c).dot(ridge.u)))
+    s0, s1 = raw(cv.value(a)), raw(cv.value(b))
+    if abs(s1 - s0) < 1e-9:
+        return
+    lo, hi = min(s0, s1), max(s0, s1)
+    for kn in ridge.curve.getKnots():
+        if lo + 1e-7 < kn < hi - 1e-7:
+            cv.insertKnot(a + (kn - s0) / (s1 - s0) * (b - a), max(1, cv.Degree - 2))
+
+
+def _top_curve_row(cv, ridge):
+    """Yamanin ust sirasi tam mahya egrisi uzerinde: egri parcasinin uclarinin izleri [s0, s1] arasindaki mahya parcasi,
+    egrinin kendi (rasyonel, derecesi yukseltilmis) tabaninda. Iki yandaki yamalar ayni s'lerde bolundugu icin ust
+    kenarlari ayni egri parcasidir (parametreleri farkli olsa da geometri ayni): kabuk kapanir."""
+    a, b = cv.FirstParameter, cv.LastParameter
+    raw = lambda p: min(ridge.hi, max(ridge.lo, (p - ridge.c).dot(ridge.u)))
+    s0, s1 = raw(cv.value(a)), raw(cv.value(b))
+    ts = _fit_params(cv)
+    Q = np.array([tuple(ridge.top(s0 + (s1 - s0) * (float(t) - a) / (b - a))) for t in ts])
+    R = _rational_basis(cv, ts)
+    sol = np.zeros((R.shape[1], 3))
+    sol[0], sol[-1] = Q[0], Q[-1]
+    if R.shape[1] > 2:
+        rhs = Q - R[:, 0:1] * sol[0] - R[:, -1:] * sol[-1]
+        sol[1:-1] = np.linalg.lstsq(R[:, 1:-1], rhs, rcond=None)[0]
+    return [V(*(float(x) for x in r)) for r in sol]
+
+
+def _flat_row(cv, top_of, K):
+    """Tepeye yakin yatay sira: egrinin her noktasi icin tepe + (kenar - tepenin izdusumu) * K, egrinin kendi tabaninda en
+    kucuk karelerle (uclar tam). Kontrol noktalarindan dogrudan kurmak mahya boyunca her parcada boncuk gibi kabarik
+    yapiyordu: kontrol noktalari egrinin disbukey yanindadir."""
+    ts = _fit_params(cv)
+    Q = []
+    for t in ts:
+        p = cv.value(float(t))
+        top, base = top_of(p)
+        Q.append(tuple(top + (p - base) * K))
+    Q = np.array(Q)
+    R = _rational_basis(cv, ts)
+    sol = np.zeros((R.shape[1], 3))
+    sol[0], sol[-1] = Q[0], Q[-1]
+    if R.shape[1] > 2:
+        rhs = Q - R[:, 0:1] * sol[0] - R[:, -1:] * sol[-1]
+        sol[1:-1] = np.linalg.lstsq(R[:, 1:-1], rhs, rcond=None)[0]
+    return [V(*(float(x) for x in r)) for r in sol]
+
+
+def _conic_patches(face, shape, center, height, sign):
+    """Klasik kubbe (0.4.x): her kenar parcasindan tek tepe noktasina ceyrek konik (rasyonel, dik duvarda tam daire).
+    Duzgun, simetrik profillerde (daire, yuvarlatilmis dikdortgen) en temiz sonuc bu: az yuz, tek parca gibi parlar.
+    Duvar merkezi gecerse ValueError."""
     n = frame_normal(face)
     n.normalize()
     corners = _corner_dirs(face, shape, n)
@@ -435,12 +762,9 @@ def ellipse_patches(face, shape, center, height, sign):
         f = neighbour(shape, e, face)
         span = (e.FirstParameter, e.LastParameter)
         for cv in _smooth_spans(e):
-            # egimli / burulmus duvarda orta sira egrinin tabanina sigmayabilir: dugum ekle. Dongu her zaman egriyle ayni
-            # sayida orta sira noktasiyla biter: once 4 denemeden sonra dugum eklenip orta sira yeniden hesaplanmiyordu,
-            # yama 67 kenar / 35 orta kutupla kurulup gecersiz kaliyordu (twistli Magic Pad'in ust yuzu: hata 0.76 ->
-            # 0.06 mm, hedef 0.02) ve kubbe duz kabarcik oluyordu
             for it in range(MAX_ROW_TRIES):
-                mid, err = _wall_row(cv, f, n, height, sign, span, corners.get((i, 0)), corners.get((i, 1)), joints)
+                mid, err = _wall_row(cv, f, n, height, sign, span, corners.get((i, 0)), corners.get((i, 1)), joints,
+                                     e.Curve)
                 if err < ROW_TOL * max(height, 1.0) or it == MAX_ROW_TRIES - 1 or cv.NbPoles > MAX_ROW_POLES:
                     break
                 k = cv.getKnots()
@@ -454,6 +778,138 @@ def ellipse_patches(face, shape, center, height, sign):
             s = Part.BSplineSurface()
             s.buildFromPolesMultsKnots(poles, [3, 3], cv.getMultiplicities(), [0.0, 1.0], cv.getKnots(), False, False,
                                        2, cv.Degree, [[w * a for w in W] for a in weights])
+            out.append((e, s))
+    return out
+
+
+def _normal(s, u, v):
+    """Yuzey normali; uca kapanan sutunda (kenar, orta sira, tepe ayni nokta) tanimsiz: sifir."""
+    try:
+        return tuple(s.normal(u, v))
+    except Exception:
+        return (0.0, 0.0, 0.0)
+
+
+def _folds(patches, nu=24, nv=48):
+    """Yuzeyde normalin ters dondugu komsu ornek cifti sayisi (katlanma). Tepe noktasina / uca kapanan dar bolge
+    (kubbe yuksekliginin %5'inden alcak sutunlar ve tepeye cok yakin satirlar) sayilmaz: orada normal zaten tanimsiz."""
+    cols = []
+    for e, s in patches:
+        v0, v1 = s.bounds()[2:]
+        Vv = np.linspace(v0, v1, nv)
+        cols.append((s, Vv, np.array([(s.value(1.0, float(v)) - s.value(0.0, float(v))).Length for v in Vv])))
+    tall = max(c[2].max() for c in cols) if cols else 0.0
+    U = np.linspace(0.0, 0.9, nu)
+    bad = 0
+    for s, Vv, H in cols:
+        N = np.array([[_normal(s, float(u), float(v)) for v in Vv] for u in U])
+        N = N / (np.linalg.norm(N, axis=2)[..., None] + 1e-12)
+        ok = H > 0.05 * tall
+        du = (N[1:] * N[:-1]).sum(2) < 0
+        dv = (N[:, 1:] * N[:, :-1]).sum(2) < 0
+        bad += int(du[:, ok].sum() + dv[:, ok[1:] & ok[:-1]].sum())
+    return bad
+
+
+def ellipse_patches(face, shape, center, height, sign):
+    """Kubbe yamalari. Once klasik tek tepeli kubbe (duzgun profilde en guzeli; once sirt her uzun profilde devreye
+    giriyordu, simetrik yuvarlatilmis dikdortgende de kubbeyi seritlere bolup boncuk gibi yapti). Katlaniyorsa (uzun,
+    sivri, twistli profil): sirtli kafes (mahya uctan, olmazsa daha iceriden), o da olmazsa kafesli tek tepe. Hicbiri
+    olmazsa ValueError (Dome serbest tumsege doner)."""
+    n = frame_normal(face)
+    n.normalize()
+    try:
+        out = _conic_patches(face, shape, center, height, sign)
+        if _folds(out) == 0:
+            return out
+    except ValueError:
+        pass
+    tries = [r for r in (_ridge(face, center, n, k) for k in RIDGE_ENDS) if r is not None] + [None]
+    last = None
+    for ridge in tries:
+        try:
+            out = _patches(face, shape, center, height, sign, ridge)
+        except ValueError as e:
+            last = e
+            continue
+        if ridge is None or ellipse_tool(face, out).isValid():   # ucta mahya (end 0) duz uclu profilde kapanmayabilir
+            return out
+        last = ValueError("ridge dome is not a valid solid")
+    raise last
+
+
+def _patches(face, shape, center, height, sign, ridge):
+    """Her kenar icin bir yama: kenardan duvar boyunca cikip tepeye ceyrek konik ile varir. Yay ve egri carpimi NURBS:
+    sinir kenarin kendisi, dik duvarda yuzey tam. ridge None: yamalar tepede tek noktada bulusur; ridge: ust kenarlar sirtin
+    duz parcalari, iki yanin yamalari sirtta bulusur (tepede normal dik, yuzey teget). Keskin kose tepeye kadar sirt olarak
+    gider. Duvar o kadar yatik ki kenar merkezi / sirti gecerse ValueError."""
+    n = frame_normal(face)
+    n.normalize()
+    corners = _corner_dirs(face, shape, n)
+    apex = center + n * (sign * height)
+    joints = {}
+    out = []
+    if ridge is not None:
+        ridge.build(n, sign * height)
+        rspans = _ridge_spans(face, ridge)
+    edges = list(face.Edges)
+    for i, e in enumerate(edges):
+        f = neighbour(shape, e, face)
+        span = (e.FirstParameter, e.LastParameter)
+        curves = [cv for ee, cv in rspans if ee.isSame(e)] if ridge is not None else _smooth_spans(e)
+        for cv in curves:
+            # egimli / burulmus duvarda orta sira egrinin tabanina sigmayabilir: dugum ekle. Dongu her zaman egriyle ayni
+            # sayida orta sira noktasiyla biter: once 4 denemeden sonra dugum eklenip orta sira yeniden hesaplanmiyordu,
+            # yama 67 kenar / 35 orta kutupla kurulup gecersiz kaliyordu (twistli Magic Pad'in ust yuzu: hata 0.76 ->
+            # 0.06 mm, hedef 0.02) ve kubbe duz kabarcik oluyordu
+            # SubD kafesi gibi dort sira (kullanicinin fikri): kenar, duvar boyunca teget sira (yukseklik h*K), sirta /
+            # tepeye dogru YATAY sira, tepe. Once tek kubik olmayan konik vardi (kenar, duvar yonunde orta sira, tepe):
+            # duvarin egimi tepeye kadar tasiniyor, twistli duvarda egim ucun iki yaninda ters donunce tepeye yakin
+            # katlaniyordu. Artik tepeye yakin sira duvarin degil sirtin yonunu izliyor; duvara teget, tepede yatay.
+            # yandan da kubbe: sirtin yuksekligi boyunca yarim elips; teget sira her noktada o yuksekligin K kati
+            hk = (lambda p: height * CAGE_K * ridge.rise(ridge.s_of(p))) if ridge is not None else height * CAGE_K
+            for it in range(MAX_ROW_TRIES):
+                mid, err = _wall_row(cv, f, n, hk, sign, span, corners.get((i, 0)), corners.get((i, 1)), joints,
+                                     e.Curve)
+                if err < ROW_TOL * max(height * CAGE_K, 1.0) or it == MAX_ROW_TRIES - 1 or cv.NbPoles > MAX_ROW_POLES:
+                    break
+                k = cv.getKnots()
+                for a, b in zip(k[:-1], k[1:]):
+                    cv.insertKnot((a + b) / 2.0)
+            if ridge is not None:
+                # mahya kubik egri: ust sira onu tam tasisin diye taban derecesi yukseltilir (rasyonel kenarda pay
+                # derecesi kenar + 3), orta sira yeni tabanda yeniden kurulur
+                cv = cv.copy()
+                cv.increaseDegree(cv.Degree + (3 if cv.isRational() else max(0, 3 - cv.Degree)))
+                _ridge_knots(cv, ridge)
+                mid, err = _wall_row(cv, f, n, hk, sign, span, corners.get((i, 0)), corners.get((i, 1)), joints,
+                                     e.Curve)
+            P, W = cv.getPoles(), cv.getWeights()
+            top = [apex] * len(P) if ridge is None else _top_curve_row(cv, ridge)
+            plan = lambda x: x - n * (x - center).dot(n)       # yuz duzlemine izdusum
+            for p, q, t in zip(P, mid, top):
+                # sirtta: kenar noktasinin mahyadaki izi (ust sira kutbu egri parcasinda dogrusal dagilir, burunda
+                # kenarin izinden kayar; onunla karsilastirmak dik duvarda bile "merkezi gecti" diyordu)
+                base_t = plan(t) if ridge is None else plan(ridge.top(ridge.s_of(p)))
+                r = p - base_t                             # tepeden kenara, yuz duzleminde
+                if r.Length > 1e-2 * max(height, 1.0) and (plan(q) - base_t).dot(r) <= 0:
+                    raise ValueError("wall passes the centre")
+            if ridge is None:
+                top_of = lambda p: (apex, plan(apex))
+            else:
+                def top_of(p):
+                    # yatay sira mahyanin egimini izler (yalniz yanlara yatay): kapak tepesinde yuzey mahyanin inisini
+                    # surduruyor; once tepe yatay, yandan bakinca kapakla komsu yama arasinda kirik vardi
+                    x = ridge.s_of(p)
+                    top = ridge.top(x)
+                    base = plan(top)
+                    w = (p - base) * CAGE_K
+                    return top + n * (ridge.slope(x) * w.dot(ridge.u)), base
+            flat = _flat_row(cv, top_of, CAGE_K)
+            poles = [P, mid, flat, top]
+            s = Part.BSplineSurface()
+            s.buildFromPolesMultsKnots(poles, [4, 4], cv.getMultiplicities(), [0.0, 1.0], cv.getKnots(), False, False,
+                                       3, cv.Degree, [list(W)] * 4)
             out.append((e, s))
     return out
 
@@ -493,15 +949,27 @@ def ellipse_tool(face, patches):
 
 
 def ellipse_error(face, shape, patches):
-    """Duvardaki en buyuk aci (derece): yama normali ile komsu yuz normali."""
-    worst = 0.0
+    """Duvardaki en buyuk aci (derece): yama normali ile komsu yuz normali. Mahya profilin ucuna indiginde yama orada tek
+    noktaya kapanir, normal tanimsiz: kubbenin yuksekligi %5'in altinda kalan uc bolgesi olculmez (yoksa 0.1 mm icinde
+    38 derece gibi anlamsiz deger)."""
+    cols = []
     for e, s in patches:
-        f = neighbour(shape, e, face)
         v0, v1 = s.bounds()[2:]
         for t in np.linspace(0.02, 0.98, 25):
-            q = s.value(0.0, v0 + (v1 - v0) * float(t))
-            a, b = s.normal(0.0, v0 + (v1 - v0) * float(t)), f.normalAt(*f.Surface.parameter(q))
-            worst = max(worst, np.degrees(np.arccos(min(1.0, abs(a.dot(b)) / (a.Length * b.Length)))))
+            v = v0 + (v1 - v0) * float(t)
+            cols.append((e, s, v, (s.value(1.0, v) - s.value(0.0, v)).Length))
+    tall = max(c[3] for c in cols) if cols else 0.0
+    worst = 0.0
+    for e, s, v, h in cols:
+        if h < 0.05 * tall:
+            continue
+        f = neighbour(shape, e, face)
+        q = s.value(0.0, v)
+        try:
+            a, b = s.normal(0.0, v), f.normalAt(*f.Surface.parameter(q))
+        except Exception:
+            continue
+        worst = max(worst, np.degrees(np.arccos(min(1.0, abs(a.dot(b)) / (a.Length * b.Length)))))
     return worst
 
 
