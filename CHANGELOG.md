@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 (2026-11-24)
 
 ### New: Magic Pad
 
@@ -50,11 +50,18 @@
 
 ### Dome
 
+- **Ridge for long, sharp outlines:** a wing-like outline (long, pointed, twisted walls) folded near the tip because all
+  patches ran to a single top point. Such outlines now get a curved **ridge** along their middle: the dome is arched
+  across *and* along (half-ellipse from the side), stays tangent to the walls (0.03 to 0.2 degrees on the test wing)
+  and has no folds. Patches are spaced a bit closer on the slopes near the ends and wider in the middle; each pointed
+  end is closed by a single cap patch that continues the slope of the ridge without a kink.
+- **Regular outlines unchanged:** circles, slots, rounded rectangles and other outlines that do not fold keep the
+  classic single-top dome (few faces, one smooth highlight). The ridge is used only when the classic dome would fold.
+- **Faster:** wall normals are cached; the test wing takes 1.5 s for the first dome and 0.75 s when the height changes
+  (before about 3.8 s).
 - **Tangency lost on twisted / leaning walls fixed:** the knot insertion stopped after 4 tries without recomputing the
   wall row, so the patch got 67 edge poles against 35 middle poles, became invalid and Dome fell back to a free bump. The
   loop now always ends with a matching row (tangent error 0.002 degrees on the test part).
-- Known: on long, sharp outlines (tip radius about 1.6 mm with twisted walls) a tall tangent dome folds near the tip
-  (above about 20 mm). Keep it lower or turn off *Tangent to steep walls*; a ridge-shaped top is planned.
 
 ## 0.4.1 (2026-11-22)
 

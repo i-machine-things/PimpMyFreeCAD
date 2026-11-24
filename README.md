@@ -136,6 +136,9 @@ removes a new feature. The panel shows the measured tangent error.
 - **Filleted top edges:** the neighbour is horizontal, so the surface starts flat and rises in a gentle S (under 0.01
   degrees). Curved, concave and sharp-cornered outlines and faces with holes work; the dome returns to the face level at
   every hole.
+- **Long, sharp outlines** (a wing section): instead of one top point the dome follows a curved ridge along the middle
+  of the outline, arched across and along, tangent to the walls and without folds; each pointed end is closed by one cap
+  patch. Regular outlines (circle, slot, rounded rectangle) keep the classic single-top dome.
 
 Limits:
 - **Mixed edges and holes next to steep walls:** when only some neighbours are steep, or the face has a hole, those edges
@@ -259,7 +262,9 @@ yüzlerin ortalaması ya da seçilen bir kenar / yüz / eksen olabilir. Sürükl
 
 **Kubbe (Dome):** bir Body'nin düz yüzünü seçip düğmeye basın, *Yükseklik* verin; yüz, kenarlarda komşu yüzlere teğet bir
 kubbeye dönüşür, *Ters* katının içine oyar. Çevresi duvarsa kubbe duvarın kendi eğimiyle teğet başlar (mermi biçimi; eğimli
-Pad ve pah da olur), keskin köşeler tepeye sırt olarak gider. Fillet'li kenarda düz başlar; iç bükey çizgi ve delikli yüz de çalışır.
+Pad ve pah da olur), keskin köşeler tepeye sırt olarak gider. Fillet'li kenarda düz başlar; iç bükey çizgi ve delikli yüz de çalışır. Kanat kesiti
+gibi uzun ve sivri profillerde tek tepe yerine ortadan geçen eğri bir mahya kullanılır: kubbe enine ve boyuna kemerlidir,
+duvara teğettir, katlanmaz; sivri uçlar tek bir kapak yamasıyla kapanır. Düzgün profiller klasik tek tepeli kubbede kalır.
 
 **Body Sweep / Body Sweep Cut (deneysel):** bir katı aleti (Body ya da Part) yol boyunca süpürür ve süpürdüğü hacimle bir ya da
 birkaç katıyı keser (SolidWorks'teki gövdeli *Sweep Cut* gibi). Aleti, yolu (kenar, wire ya da sketch) ve kesilecek katıları seçip
