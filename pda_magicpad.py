@@ -44,6 +44,9 @@ def profile(obj):
     if not link or link[0] is None:
         return "Magic Pad: select a closed sketch or a flat face"
     o, subs = link[0], [s for s in (link[1] or []) if s]
+    fsubs = [s for s in subs if s.startswith("Face")]
+    if fsubs:                                              # yuz(ler): her biri kendi normaliyle (bkz. _multi_tool)
+        return _multi_profile(o, fsubs)
     try:
         if subs and subs[0].startswith("Face"):
             face = o.Shape.getElement(subs[0])
@@ -78,6 +81,216 @@ def profile(obj):
         else:                                              # bosluktaki sketch: govde hangi yandaysa orasi "iceri"
             n = _away_from(face, c, n, base)
     return face, c, n, V(origin), on_body
+
+
+def _multi_profile(o, fsubs):
+    """Birden cok duz yuz (ornegin ardisik iki yan yuz): her biri kendi dis normaliyle. (yuzlerin bileskesi, ilk yuzun
+    merkezi, ilk yuzun normali, ayni merkez, True, [(yuz, merkez, normal), ...]); gizmo ilk yuzde durur."""
+    parts = []
+    try:
+        for sub in fsubs:
+            f = o.Shape.getElement(sub)
+            if not isinstance(f.Surface, Part.Plane):
+                return "Magic Pad: the profile must be flat"
+            u0, u1, v0, v1 = f.ParameterRange
+            n = f.normalAt((u0 + u1) / 2, (v0 + v1) / 2)    # kati yuzu: yonelimi disari
+            n.normalize()
+            parts.append((f, _centroid(f), n))
+    except Exception as e:
+        return T("Magic Pad: the profile could not be read (%s)") % e
+    f0, c0, n0 = parts[0]
+    return Part.makeCompound([p[0] for p in parts]), c0, n0, V(c0), True, parts
+
+
+DIRS = ["Normal", "Average", "Custom"]
+
+
+def direction(obj, prof, n):
+    """Cekme yonu: yuzun normali, secili yuzlerin ortalama normali ya da secilen kenar / yuz / eksen. Disa bakan
+    normalle ayni yana cevrilir: pozitif uzunluk yine disari (ekler)."""
+    mode = getattr(obj, "ExtrudeDir", "Normal")
+    if mode == "Average" and len(prof) > 5:
+        d = V()
+        for p in prof[5]:
+            d += p[2]
+    elif mode == "Custom":
+        d = custom_dir(obj)
+        if d is None:
+            return n
+    else:
+        return n
+    if d.Length < 1e-9:
+        return n
+    d = V(d)
+    d.normalize()
+    if d.dot(n) < 0:
+        d = -d
+    return d
+
+
+def custom_dir(obj):
+    """Secilen yon referansi (duz kenar, duz yuz, datum cizgi / duzlem) govde koordinatinda birim vektor; yoksa None."""
+    link = getattr(obj, "DirRef", None)
+    if not link or link[0] is None:
+        return None
+    o, subs = link[0], [x for x in (link[1] or []) if x]
+    try:
+        sh = o.Shape.getElement(subs[0]) if subs else o.Shape
+        pl = App.Placement()
+        g = o.getParentGeoFeatureGroup()
+        if g is not None:
+            pl = g.getGlobalPlacement()
+        body = obj.getParentGeoFeatureGroup()
+        if body is not None:
+            pl = body.getGlobalPlacement().inverse().multiply(pl)
+        rot = pl.Rotation
+        if sh.Edges and not sh.Faces:
+            e = sh.Edges[0]
+            if not isinstance(e.Curve, Part.Line):
+                return None
+            d = V(e.Curve.Direction)                       # datum ekseni sonsuz kenar: kosesi yok
+        elif sh.Faces:
+            f = sh.Faces[0]
+            if not isinstance(f.Surface, Part.Plane):
+                return None
+            u0, u1, v0, v1 = f.ParameterRange
+            d = f.normalAt((u0 + u1) / 2, (v0 + v1) / 2)
+        else:
+            return None
+        return rot.multVec(d)
+    except Exception:
+        return None
+
+
+def _bent(obj, d, n):
+    """Yon normalden farkliysa: egim / twist ve golgeye dayali modlar (govdeye / sekle kadar) kullanilamaz. Ozel yon
+    secilmemisse ya da yuzun duzleminde kaliyorsa hata."""
+    if getattr(obj, "ExtrudeDir", "Normal") == "Custom" and custom_dir(obj) is None:
+        return "Magic Pad: select the direction (a straight edge, a flat face or a datum axis)"
+    if abs(d.dot(n)) < 0.02:
+        return "Magic Pad: the direction lies in the plane of the face"
+    if (d - n).Length < 1e-7:
+        return None
+    if abs(float(obj.TaperAngle)) > 1e-9 or abs(float(obj.Twist)) > 1e-9:
+        return "Magic Pad: taper and twist need the face normal as the direction"
+    if obj.Mode in ("UpToBody", "UpToShape"):
+        return "Magic Pad: Up to body / Up to shape need the face normal as the direction"
+    return None
+
+
+def _single(prof, part):
+    f, c, n = part
+    return f, c, n, V(c), True
+
+
+def _corners(obj, parts, base):
+    """Komsu secili yuzlerin ortak duz kenarlarinda iki prizma arasindaki kama (keskin birlesim, Fusion'daki gibi):
+    kenarin bir ucunda P, P + n1 z, P + m, P + n2 z dortgeni kenar boyunca cekilir; m iki yuzun z kadar otelenmis
+    duzlemlerinin kesisimi. Ic kosede prizmalar zaten ortusur, dortgen ortusmenin icinde kalir."""
+    out = []
+    sgn = -1.0 if obj.Reversed else 1.0
+    for i in range(len(parts)):
+        for j in range(i + 1, len(parts)):
+            fi, ci, ni = parts[i]
+            fj, cj, nj = parts[j]
+            n1, n2 = ni * sgn, nj * sgn
+            if n1.cross(n2).Length < 1e-6:                 # ayni duzlem: prizmalar zaten bitisik
+                continue
+            d = 1.0 + n1.dot(n2)
+            if d < 0.05:                                   # neredeyse ters yuzler: sivri ucu sonsuza gider
+                continue
+            for e1 in fi.Edges:
+                if not isinstance(e1.Curve, Part.Line):
+                    continue
+                if not any(e1.isSame(e2) for e2 in fj.Edges):
+                    continue
+                p0, p1 = e1.Vertexes[0].Point, e1.Vertexes[-1].Point
+                for z in interval(obj, base, n1, ci):
+                    if abs(z) < 1e-9:
+                        continue
+                    m = (n1 + n2) * (z / d)
+                    poly = Part.makePolygon([p0, p0 + n1 * z, p0 + m, p0 + n2 * z, p0])
+                    out.append(Part.Face(poly).extrude(p1 - p0))
+    return out
+
+
+def _follow(obj, k, parts, base, tool):
+    """Yan duvar komsuyu izlesin (Fusion'daki yuz itme gibi): secili yuzun secili olmayan duz bir komsuyla ortak duz
+    kenarinda, prizmanin dik yan duvari yerine komsunun duzlemi sinir olur. Komsu disa yatiksa prizmadan ucgen kesilir
+    (cikinti kalmaz), ice yatiksa ucgen eklenir (kesmede ince serit kalmaz)."""
+    if base is None or base.isNull() or getattr(obj, "SideFaces", "Neighbours") != "Neighbours":
+        return tool
+    f, c, nf, n = parts[k]                                 # yuz, merkez, yuz normali, cekme yonu
+    sel = [p[0] for p in parts]
+    sgn = -1.0 if obj.Reversed else 1.0
+    n = n * sgn
+    zs = [z for z in interval(obj, base, n, c) if abs(z) > 1e-9]
+    for e in f.Edges:
+        if not isinstance(e.Curve, Part.Line):
+            continue
+        p0, p1 = e.Vertexes[0].Point, e.Vertexes[-1].Point
+        ed = p1 - p0
+        if ed.Length < 1e-9:
+            continue
+        for g_face in base.ancestorsOfType(e, Part.Face) if _has_edge(base, e) else []:
+            if g_face.isSame(f) or any(g_face.isSame(x) for x in sel):
+                continue
+            if not isinstance(g_face.Surface, Part.Plane):
+                continue
+            u0, u1, v0, v1 = g_face.ParameterRange
+            g = g_face.normalAt((u0 + u1) / 2, (v0 + v1) / 2)
+            w = ed.cross(nf)                               # yuz duzleminde, kenara dik
+            w.normalize()
+            if w.dot(c - p0) > 0:                          # yuzun disina bakan, kenara dik yon
+                w = -w
+            if abs(w.dot(g)) < 1e-9:
+                continue
+            for z in zs:
+                d = n * (1.0 if z > 0 else -1.0)
+                h = abs(z)
+                if abs(d.dot(g)) < 1e-9:                   # komsu prizmaya dik: zaten uyuyor
+                    continue
+                t = -h * d.dot(g) / w.dot(g)
+                q = p0 + d * h + w * t
+                tri = Part.Face(Part.makePolygon([p0, p0 + d * h, q, p0])).extrude(ed)
+                tool = tool.fuse(tri) if t > 0 else tool.cut(tri)
+    return tool
+
+
+def _has_edge(shape, e):
+    return any(x.isSame(e) for x in shape.Edges)
+
+
+def _multi_tool(obj, prof, base, mode, trim):
+    """Her yuz kendi normali boyunca; araclar birlestirilir, komsu yuzler arasina kama eklenir (yalniz uzunluk
+    modlarinda, egim / twist yokken)."""
+    tools = []
+    parts = prof[5]
+    for k, (f, c, n) in enumerate(prof[5]):
+        sub = (f, c, n, V(c), True, prof[5])               # tek yuz; ortalama yon icin butun yuzler yaninda
+        if mode in AUTO or (mode == "UpToBody" and base is not None and trim):
+            t = _upto(obj, sub, base, mode)
+        else:
+            t = build_tool(obj, sub, base)
+        if isinstance(t, str):
+            return ("%s (%s %d)" % (T(t), T("face"), k + 1)) if len(prof[5]) > 1 else t
+        tools.append(t)
+    plain = mode in ("Length", "TwoLengths", "Symmetric") and abs(float(obj.TaperAngle)) < 1e-9 \
+        and abs(float(obj.Twist)) < 1e-9
+    if plain:
+        moved = [(f, c, n, direction(obj, prof, n)) for f, c, n in parts]   # her yuzun gercek cekme yonu
+        tools = [_follow(obj, k, moved, base, t) for k, t in enumerate(tools)]
+        if all((m[3] - m[2]).Length < 1e-7 for m in moved):
+            tools += _corners(obj, parts, base)            # ortak yonde yuzler arasinda bosluk olmaz
+    tool = tools[0]
+    for t in tools[1:]:
+        tool = tool.fuse(t)
+    if len(tools) > 1:
+        try:
+            tool = tool.removeSplitter()
+        except Exception:
+            pass
+    return tool
 
 
 def _away_from(face, c, n, base):
@@ -150,7 +363,8 @@ def _auto_op(obj, prof=None):
             prof = profile(obj)
         if isinstance(prof, str):
             return "Union"
-        face, c, n, origin, on_body = prof
+        face, c, n, origin, on_body = prof[:5]
+        n = direction(obj, prof, n)
         n = -n if obj.Reversed else n
         base = rp._base(obj)
         if base is None or base.isNull():
@@ -224,7 +438,12 @@ def _section(wire, k, outer, z, t, obj, n, center):
 def build_tool(obj, prof, base):
     """Eklenecek / kesilecek kati (govde koordinatinda, element map'li) ya da hata metni. Govdeye kadar: kirpilmadan
     once (bkz. up_to_body)."""
-    face, c, n, origin, on_body = prof
+    face, c, n, origin, on_body = prof[:5]
+    d = direction(obj, prof, n)
+    err = _bent(obj, d, n)
+    if err:
+        return err
+    n = d
     if obj.Reversed:
         n = -n
     z0, z1 = interval(obj, base, n, c)
@@ -602,7 +821,9 @@ def compute(obj, trim=True, prof=None):
     base = rp._base(obj)
     op = operation(obj, prof)
     mode = obj.Mode
-    if mode in AUTO or (mode == "UpToBody" and base is not None and trim):
+    if len(prof) > 5:                                      # birden cok yuz
+        tool = _multi_tool(obj, prof, base, mode, trim)
+    elif mode in AUTO or (mode == "UpToBody" and base is not None and trim):
         tool = _upto(obj, prof, base, mode)
     else:
         tool = build_tool(obj, prof, base)
@@ -613,7 +834,11 @@ def compute(obj, trim=True, prof=None):
 
 def _upto(obj, prof, base, mode):
     face, c, n, origin = prof[0], prof[1], prof[2], prof[3]
-    n = -n if obj.Reversed else n
+    d = direction(obj, prof, n)
+    err = _bent(obj, d, n)
+    if err:
+        return err
+    n = -d if obj.Reversed else d
     names = {"UpToBody": "Up to body", "UpToFirst": "Up to first face", "UpToLast": "Up to last face",
              "UpToFace": "Up to face", "UpToShape": "Up to shape"}
     try:
@@ -645,9 +870,22 @@ def _upto(obj, prof, base, mode):
 
 MISS = ["Cut", "Length"]
 OPMODES = ["Auto", "Add", "Cut"]
+SIDES = ["Neighbours", "Perpendicular"]
 
 
 def miss_prop(obj):
+    if "ExtrudeDir" not in obj.PropertiesList:
+        obj.addProperty("App::PropertyEnumeration", "ExtrudeDir", "Magic Pad",
+                        "Normal: each face along its own normal; Average: all selected faces along their mean normal; "
+                        "Custom: along the selected straight edge, flat face or datum axis (DirRef)")
+        obj.ExtrudeDir = DIRS
+        obj.addProperty("App::PropertyLinkSubGlobal", "DirRef", "Magic Pad",
+                        "Custom direction: a straight edge, a flat face or a datum line / plane")
+    if "SideFaces" not in obj.PropertiesList:
+        obj.addProperty("App::PropertyEnumeration", "SideFaces", "Magic Pad",
+                        "Selected faces: the side walls follow the neighbouring faces (like pushing a face), or stand "
+                        "perpendicular to the face (like Pad)")
+        obj.SideFaces = SIDES
     if "OpMode" not in obj.PropertiesList:
         obj.addProperty("App::PropertyEnumeration", "OpMode", "Magic Pad",
                         "Auto: the direction decides (into the solid cuts, out of it adds); Add / Cut: forced")

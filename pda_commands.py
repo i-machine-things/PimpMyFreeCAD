@@ -173,7 +173,7 @@ class _MagicPad:
         for so in sel:
             names = [s for s in so.SubElementNames if s.startswith("Face")]
             if names:
-                prof, subs = so.Object, names[:1]
+                prof, subs = so.Object, names               # birden cok yuz: her biri kendi normaliyle
                 break
             if so.Object.isDerivedFrom("Part::Part2DObject"):
                 prof = so.Object

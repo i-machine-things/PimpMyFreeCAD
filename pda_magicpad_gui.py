@@ -489,7 +489,8 @@ class Editor(object):
         if isinstance(prof, str):
             self._show(None, T(prof))
             return
-        face, c, n, origin, on_body = prof
+        face, c, n, origin, on_body = prof[:5]
+        n = mp.direction(obj, prof, n)
         if obj.Reversed:
             n = -n
         self.axis = (c, n)
@@ -589,6 +590,20 @@ class Editor(object):
                 edges = []
         size = max(tool.BoundBox.DiagonalLength, 1.0) if tool is not None else 1.0
         self._lines(self.s_coord, self.s_set, edges, size)
+
+    def picking(self, on):
+        """Hedef / eksen secerken onizleme ve ok gizlenir: arkalarindaki yuz ve kenarlar gorunur ve rahat secilir."""
+        try:
+            idx = self.parent.findChild(self.prev)
+            if on and idx >= 0:
+                self.parent.removeChild(self.prev)         # prev ref'li: silinmez
+                self.gizmo.show(False)
+            elif not on and idx < 0:
+                self.parent.addChild(self.prev)
+                if not getattr(self, "closed", False):
+                    self.refresh()
+        except Exception:
+            pass
 
     def _scale_gizmo(self):
         self.gizmo.update_scale()
@@ -708,7 +723,11 @@ class _TargetPicker(object):
         s = sel[-1]
         subs = [x for x in s.SubElementNames if x]
         if self.panel.observer is self:
-            self.panel.set_target(s.Object, subs[-1].split(".")[-1] if subs else "")
+            sub = subs[-1].split(".")[-1] if subs else ""
+            if self.panel.pick_kind == "dir":
+                self.panel.set_dir(s.Object, sub)
+            else:
+                self.panel.set_target(s.Object, sub)
 
 
 class Panel(object):
@@ -763,6 +782,7 @@ class Panel(object):
         f.addRow(self.t_label, tw)
         self.pick.toggled.connect(self._pick_toggled)
         self.observer = None
+        self.pick_kind = None
         self.rev = QtWidgets.QCheckBox(T("Reversed"))
         f.addRow(self.rev)
         self.opmode = QtWidgets.QComboBox()
@@ -772,6 +792,29 @@ class Panel(object):
         self.opmode.setToolTip(T("Auto: into the solid cuts, out of it adds. Choose Add or Cut when the direction "
                                  "does not tell it right."))
         f.addRow(T("Operation"), self.opmode)
+        self.dirmode = QtWidgets.QComboBox()
+        self.dirmode.addItem(T("Face normal"), "Normal")
+        self.dirmode.addItem(T("Average of the faces"), "Average")
+        self.dirmode.addItem(T("Custom (edge, face or axis)"), "Custom")
+        f.addRow(T("Direction"), self.dirmode)
+        self.dpick = QtWidgets.QPushButton(T("Select..."))
+        self.dpick.setCheckable(True)
+        self.dpick.setToolTip(T("Then click a straight edge, a flat face or a datum axis in the 3D view"))
+        self.dref = QtWidgets.QLabel()
+        self.dref.setWordWrap(True)
+        dw = QtWidgets.QWidget()
+        dl = QtWidgets.QHBoxLayout(dw)
+        dl.setContentsMargins(0, 0, 0, 0)
+        dl.addWidget(self.dpick)
+        dl.addWidget(self.dref, 1)
+        self.d_label = QtWidgets.QLabel(T("Axis"))
+        f.addRow(self.d_label, dw)
+        self.dpick.toggled.connect(self._dpick_toggled)
+        self.sides = QtWidgets.QComboBox()
+        self.sides.addItem(T("Follow the neighbouring faces"), "Neighbours")
+        self.sides.addItem(T("Perpendicular (like Pad)"), "Perpendicular")
+        self.sides_label = QtWidgets.QLabel(T("Side walls"))
+        f.addRow(self.sides_label, self.sides)
         lay.addWidget(g)
         g = QtWidgets.QGroupBox(T("Shape"))
         f = QtWidgets.QFormLayout(g)
@@ -801,7 +844,7 @@ class Panel(object):
         self.sync()
         for s in (self.length, self.length2, self.taper, self.twist):
             self._connect_spin(s)
-        for c in (self.mode, self.miss, self.center, self.opmode):
+        for c in (self.mode, self.miss, self.center, self.opmode, self.dirmode, self.sides):
             c.currentIndexChanged.connect(lambda i: self._later())
         for c in (self.rev, self.ease, self.refine):
             c.toggled.connect(lambda on: self._later())
@@ -865,6 +908,8 @@ class Panel(object):
                     self._set(w, float(getattr(o, prop)))
             self.miss.setCurrentIndex(max(self.miss.findData(getattr(o, "Miss", "Cut")), 0))
             self.opmode.setCurrentIndex(max(self.opmode.findData(getattr(o, "OpMode", "Auto")), 0))
+            self.dirmode.setCurrentIndex(max(self.dirmode.findData(getattr(o, "ExtrudeDir", "Normal")), 0))
+            self.sides.setCurrentIndex(max(self.sides.findData(getattr(o, "SideFaces", "Neighbours")), 0))
             self.rev.setChecked(bool(o.Reversed))
             self.center.setCurrentIndex(max(self.center.findData(o.TwistCenter), 0))
             self.ease.setChecked(bool(o.TwistEase))
@@ -881,15 +926,30 @@ class Panel(object):
         self.pick.setVisible(tgt)
         self.target.setVisible(tgt)
         self.t_label.setVisible(tgt)
-        if not tgt:
+        if not tgt and self.pick_kind == "target":
             self.pick_off()
         self.target.setText(self._target_text())
+        faces = self._face_profile()
+        custom = getattr(o, "ExtrudeDir", "Normal") == "Custom"
+        self.dpick.setVisible(custom)
+        self.dref.setVisible(custom)
+        self.d_label.setVisible(custom)
+        if not custom and self.pick_kind == "dir":
+            self.pick_off()
+        if custom and self.pick_kind is None and mp.custom_dir(o) is None and not getattr(self, "_auto_picked", False):
+            self._auto_picked = True                       # Ozel secilince eksen secimi kendiliginden baslar
+            QtCore.QTimer.singleShot(0, lambda: self.dpick.setChecked(True))
+        self.dref.setText(self._dir_text())
+        self.dirmode.model().item(1).setEnabled(faces)      # ortalama: yalniz secili yuzlerde anlamli
+        self.sides.setVisible(faces)
+        self.sides_label.setVisible(faces)
         self.status(self.ed.error)
 
     def apply(self):
         o = self.ed.obj
         vals = dict(Mode=self.mode.currentData(), Miss=self.miss.currentData(), Reversed=self.rev.isChecked(),
-                    OpMode=self.opmode.currentData(),
+                    OpMode=self.opmode.currentData(), ExtrudeDir=self.dirmode.currentData(),
+                    SideFaces=self.sides.currentData(),
                     TwistCenter=self.center.currentData(), TwistEase=self.ease.isChecked(),
                     Refine=self.refine.isChecked())
         for w, prop in ((self.length, "Length"), (self.length2, "Length2"), (self.taper, "TaperAngle"),
@@ -920,16 +980,57 @@ class Panel(object):
         subs = [x for x in (link[1] or []) if x]
         return link[0].Label + (" : " + subs[0] if subs else "")
 
+    def _face_profile(self):
+        link = getattr(self.ed.obj, "Profile", None)
+        return bool(link and link[0] is not None and any(x.startswith("Face") for x in (link[1] or []) if x))
+
+    def _dir_text(self):
+        link = getattr(self.ed.obj, "DirRef", None)
+        if not link or link[0] is None:
+            return T("(none)")
+        subs = [x for x in (link[1] or []) if x]
+        return link[0].Label + (" : " + subs[0] if subs else "")
+
+    def _start_pick(self, kind, label):
+        self.pick_off()
+        self.pick_kind = kind
+        btn = self.pick if kind == "target" else self.dpick
+        btn.blockSignals(True)
+        btn.setChecked(True)
+        btn.blockSignals(False)
+        self.observer = _TargetPicker(self)
+        Gui.Selection.addObserver(self.observer)
+        Gui.Selection.clearSelection()
+        self.ed.picking(True)
+        label.setText(T("Click the target in the 3D view") if kind == "target" else T("Click the axis in the 3D view"))
+
     def _pick_toggled(self, on):
         if on:
-            if self.observer is None:
-                self.observer = _TargetPicker(self)
-                Gui.Selection.addObserver(self.observer)
-            Gui.Selection.clearSelection()
-            self.target.setText(T("Click the target in the 3D view"))
+            self._start_pick("target", self.target)
         else:
             self.pick_off()
             self.target.setText(self._target_text())
+
+    def _dpick_toggled(self, on):
+        if on:
+            sel = Gui.Selection.getSelectionEx("", 1)       # once secilmis kenar / yuz / eksen varsa hemen alinir
+            prof = getattr(self.ed.obj, "Profile", None)
+            if sel and prof and sel[-1].Object == prof[0] and \
+                    set(x.split(".")[-1] for x in sel[-1].SubElementNames) <= set(prof[1] or []):
+                sel = []                                   # profilin kendi yuzleri yon sayilmaz
+            if sel:
+                s = sel[-1]
+                subs = [x for x in s.SubElementNames if x]
+                self.dpick.blockSignals(True)
+                self.dpick.setChecked(False)
+                self.dpick.blockSignals(False)
+                self.set_dir(s.Object, subs[-1].split(".")[-1] if subs else "")
+                if mp.custom_dir(self.ed.obj) is not None:
+                    return
+            self._start_pick("dir", self.dref)
+        else:
+            self.pick_off()
+            self.dref.setText(self._dir_text())
 
     def pick_off(self):
         if self.observer is not None:
@@ -938,10 +1039,31 @@ class Panel(object):
             except Exception:
                 pass
             self.observer = None
-        if self.pick.isChecked():
-            self.pick.blockSignals(True)
-            self.pick.setChecked(False)
-            self.pick.blockSignals(False)
+            self.ed.picking(False)
+        self.pick_kind = None
+        for b in (getattr(self, "pick", None), getattr(self, "dpick", None)):
+            if b is not None and b.isChecked():
+                b.blockSignals(True)
+                b.setChecked(False)
+                b.blockSignals(False)
+
+    def set_dir(self, o, sub):
+        """Ozel yon: duz kenar, duz yuz ya da datum cizgi / duzlem."""
+        obj = self.ed.obj
+        link = (o, [sub] if sub else [])
+        try:
+            obj.DirRef = link
+        except Exception as e:
+            self.dref.setText(str(e))
+            return
+        if mp.custom_dir(obj) is None:
+            obj.DirRef = None
+            self.dref.setText(T("Select a straight edge, a flat face or a datum axis"))
+            return
+        self.pick_off()
+        Gui.Selection.clearSelection()
+        self.sync()
+        self.ed.refresh()
 
     def set_target(self, o, sub):
         """Secilen hedefi baglar. Yuze kadar: yalniz yuz; sekle kadar: nesne (PartDesign ozelliginin yuzu secildiyse

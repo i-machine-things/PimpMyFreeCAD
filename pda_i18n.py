@@ -571,6 +571,38 @@ TR = {
         'Oku sürükleyin: katının dışına çekmek ekler, içine itmek keser. Yönü çevirmek için oka çift tıklayın.',
     'Double-click the arrow to flip the direction.':
         'Yönü çevirmek için oka çift tıklayın.',
+    'face':
+        'yüz',
+    'Face normal':
+        'Yüz normali',
+    'Average of the faces':
+        'Yüzlerin ortalaması',
+    'Custom (edge, face or axis)':
+        'Özel (kenar, yüz ya da eksen)',
+    'Direction':
+        'Yön',
+    'Axis':
+        'Eksen',
+    'Then click a straight edge, a flat face or a datum axis in the 3D view':
+        'Sonra 3B görünümde düz bir kenarı, düz bir yüzü ya da bir datum eksenini tıklayın',
+    'Follow the neighbouring faces':
+        'Komşu yüzleri izle',
+    'Perpendicular (like Pad)':
+        'Dik (Pad gibi)',
+    'Side walls':
+        'Yan duvarlar',
+    'Click the axis in the 3D view':
+        'Ekseni 3B görünümde tıklayın',
+    'Select a straight edge, a flat face or a datum axis':
+        'Düz bir kenar, düz bir yüz ya da datum ekseni seçin',
+    'Magic Pad: taper and twist need the face normal as the direction':
+        'Magic Pad: eğim ve burulma için yön yüz normali olmalı',
+    'Magic Pad: Up to body / Up to shape need the face normal as the direction':
+        'Magic Pad: Gövdeye kadar / Şekle kadar için yön yüz normali olmalı',
+    'Magic Pad: select the direction (a straight edge, a flat face or a datum axis)':
+        'Magic Pad: yönü seçin (düz bir kenar, düz bir yüz ya da datum ekseni)',
+    'Magic Pad: the direction lies in the plane of the face':
+        'Magic Pad: yön yüzün düzleminde kalıyor',
     'Mirror move':
         'Simetrik taşı',
     'Two selected points move symmetrically. The first selected point is the base: the other snaps to its mirror about the loft axis, perpendicular to the view. Rotating the view turns it off':

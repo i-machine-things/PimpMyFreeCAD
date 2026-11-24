@@ -104,6 +104,9 @@ value next to the arrow to type a length; the panel fields take FreeCAD expressi
   leaves it last.
 - **Operation:** *Auto* adds or cuts by direction; choose *Add* or *Cut* when the direction does not tell it right.
 - **Taper and twist** work in every mode (twist around the profile centre or the sketch origin, optional ease in / out).
+- **Several faces:** select neighbouring flat faces (Ctrl) to push or pull them together; each moves along its own normal
+  and the corners close sharp. *Side walls* follow the neighbouring faces or stand perpendicular like a Pad.
+- **Direction:** face normal, the average of the selected faces, or a custom straight edge, flat face or datum axis.
 - **Fast:** while you drag there is no boolean, only the volume to add or cut; the lines where it meets the Body appear
   when you release the arrow. The solid is computed on **OK**, one undo step.
 
@@ -249,7 +252,8 @@ yanındaki turuncu değere tıklayıp uzunluk yazabilirsiniz, paneldeki alanlar 
 Uzunluk, İki uzunluk, Simetrik, Sonuna kadar, Gövdeye kadar (her nokta gövdeye ilk değdiği yerde durur; içi boş tüp ve
 geniş profil de olur), İlk yüze kadar, Son yüze kadar, Yüze kadar (seçilen yüz uzatılır) ve Şekle kadar (başka bir katı ya da
 gövde). *İşlem* Otomatik yöne göre ekler ya da keser; gerekirse Ekle / Kes seçilir. Eğim (taper) ve burulma (twist) her modda
-çalışır. Sürüklerken boolean yapılmaz, katı **Tamam**'da hesaplanır.
+çalışır. Komşu birkaç yüz birlikte seçilip itilebilir (her biri kendi normaliyle, köşeler keskin birleşir); yön yüz normali,
+yüzlerin ortalaması ya da seçilen bir kenar / yüz / eksen olabilir. Sürüklerken boolean yapılmaz, katı **Tamam**'da hesaplanır.
 
 **Kubbe (Dome):** bir Body'nin düz yüzünü seçip düğmeye basın, *Yükseklik* verin; yüz, kenarlarda komşu yüzlere teğet bir
 kubbeye dönüşür, *Ters* katının içine oyar. Çevresi duvarsa kubbe duvarın kendi eğimiyle teğet başlar (mermi biçimi; eğimli

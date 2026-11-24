@@ -411,17 +411,23 @@ def _key(lights):
 class _LightObserver:
     """View tercihlerinde isik ayari degisince doku yenilenir (FreeCAD isiklari uyguladiktan sonra okunur)."""
 
-    def OnChange(self, grp, reason):
+    def onChange(self, grp, reason):
         if "light" in reason.lower() or "ambient" in reason.lower():
             from PySide import QtCore
             QtCore.QTimer.singleShot(150, refresh_lights)
+
+    OnChange = onChange                                    # FreeCAD surumune gore biri cagrilir (26.3: onChange)
 
 
 def _watch_lights():
     global _light_obs
     if _light_obs is None:
-        _light_obs = _LightObserver()
-        App.ParamGet("User parameter:BaseApp/Preferences/View").Attach(_light_obs)
+        obs = _LightObserver()
+        try:
+            App.ParamGet("User parameter:BaseApp/Preferences/View").Attach(obs)
+            _light_obs = obs
+        except Exception as e:                             # izleme olmadan da matcap calisir
+            App.Console.PrintWarning("Matcap: light preferences are not watched (%s)\n" % e)
 
 
 def refresh_lights(force=False):

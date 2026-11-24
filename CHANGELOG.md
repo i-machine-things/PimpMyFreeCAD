@@ -16,12 +16,23 @@
   force it for special cases. The tree icon follows the operation.
 - **Taper and twist** in every mode, with profile centre or sketch origin as the axis and optional ease in / out. In the
   Up to modes the twist is completed at the contact. Profiles with holes and several separate regions work.
+- **Several faces at once:** select neighbouring flat faces of the Body (Ctrl) and push or pull them together. Each face
+  moves along its own normal and the corners between them close sharp, like pushing faces in other CAD systems. *Side
+  walls* follow the unselected neighbouring faces (default) or stand perpendicular like a Pad.
+- **Direction:** the face normal, the average normal of the selected faces, or a custom direction from a straight edge, a
+  flat face or a datum axis (also for sketches). While a target or an axis is being picked the preview is hidden, so the
+  faces and edges behind it can be clicked.
 - **Fast preview:** no boolean while dragging, only the volume to add or cut; the intersection with the Body is drawn
   when the arrow is released. On a plate with 400 holes a preview update takes about 1 ms (FreeCAD's Pad: 3 s) and the
   final recompute 1.8 s (Pad: 3.3 s).
 - **Topological naming:** the plain extrusion keeps FreeCAD's element map; a sketch and a fillet on the top face survive
   length and profile changes. Turning twist or taper on or off rebuilds the side faces and can break fillets attached to
   them (noted in the panel).
+
+### Matcap
+
+- *Matcap with FreeCAD lights* did not follow later changes of the light preferences in FreeCAD 26.3: watching the
+  preferences failed at start-up (`Object has no onChange attribute`). Fixed.
 
 ### Dome
 
