@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Magic Pad
+
+- **Fix: the arrow could only be grabbed on its lower half.** The grab area now covers the whole arrow, from the knob to
+  the tip of the cone.
+
 ## 0.5.1 (2026-11-25)
 
 ### Magic Pad

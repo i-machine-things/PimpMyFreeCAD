@@ -326,13 +326,14 @@ class Gizmo(object):
         return self.root.whichChild.getValue() == 0        # alan nesnesi sayiyla karsilastirilmaz (hep 'farkli' cikiyordu)
 
     def _hit(self, pos):
-        """Butun ok yakalanir: topuzun altindan koninin ucuna (0.72) kadar, 16 px genislikte. Once yalniz orta kisim
-        tutuluyordu."""
+        """Butun ok yakalanir: topuzun altindan koninin ucuna kadar, 16 px genislikte. Coin'de SoTranslation'lar ust
+        uste eklenir: govde 0..1, koni merkezi 0.5 + 0.61 = 1.11, ucu 1.22. Eskiden uc 0.72 saniliyordu: okun yalniz
+        alt yarisi tutuluyordu (27.1'de olculdu: cizilen ok hesaplanandan 1.7 kat uzundu)."""
         if not self._visible() or self.origin is None:
             return False
         p = self.origin + self.dir * self.value
         a = sm.screen_point(self.view, p - self.dir * (self.size * 0.12))
-        b = sm.screen_point(self.view, p + self.dir * (self.size * 0.80))
+        b = sm.screen_point(self.view, p + self.dir * (self.size * 1.30))
         return sm._seg_dist(pos[0], pos[1], a, b) < 16.0
 
     def _param(self, pos):
