@@ -83,6 +83,18 @@ def _element(o, sub):
     return o.Shape.getElement(sub)
 
 
+def _merged(faces):
+    """Birden cok sketch bolgesi tek profil: bitisik bolgeler kaynatilir (aradaki sketch cizgisi yan yuzde ve uste dikis
+    birakiyordu), ayri bolgeler ayri yuz kalir."""
+    try:
+        r = faces[0].fuse(faces[1:]).removeSplitter()
+        if r.Faces:
+            return r.Faces[0] if len(r.Faces) == 1 else Part.makeCompound(r.Faces)
+    except Exception:
+        pass
+    return Part.makeCompound(faces)
+
+
 def profile(obj):
     """Profil: (yuz, merkez, dis normal, sketch orijini, govdenin uzerinde mi) ya da hata metni. Yuz, sketch'in
     kapali tellerinden (delikler dahil) ya da secilen duz yuzden; govde koordinatinda."""
@@ -98,7 +110,7 @@ def profile(obj):
     try:
         if isubs:                                          # sketch'te tiklanan bolge(ler): yalniz o(nlar), delikleriyle
             fs = [_element(o, s) for s in isubs]
-            face = fs[0] if len(fs) == 1 else Part.makeCompound(fs)
+            face = fs[0] if len(fs) == 1 else _merged(fs)
             origin = o.Placement.Base if _sketch(o) else _centroid(face)
         elif subs and subs[0].startswith("Face"):
             face = o.Shape.getElement(subs[0])

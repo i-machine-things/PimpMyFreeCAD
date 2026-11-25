@@ -25,6 +25,7 @@
 - **Fix: clicking inside a sketch (FreeCAD 1.1 / 27.1) pads only that region**, with its holes, instead of the whole
   sketch. Selecting the sketch in the tree still pads all of it. A target or direction picked inside a sketch works
   too.
+  Several adjacent regions picked together become one profile, without a seam line between them.
 
 ## 0.5.1 (2026-11-25)
 
