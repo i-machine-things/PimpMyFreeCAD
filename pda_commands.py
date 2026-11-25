@@ -184,7 +184,8 @@ class _MagicPad:
                 prof, subs = so.Object, names               # birden cok yuz: her biri kendi normaliyle
                 break
             if so.Object.isDerivedFrom("Part::Part2DObject"):
-                prof = so.Object
+                prof = so.Object                           # sketch'in icine tiklandiysa (27.1) yalniz o bolge(ler)
+                subs = [s for s in so.SubElementNames if s.startswith("InternalFace")]
                 break
         if prof is None:
             App.Console.PrintWarning(T("Magic Pad: select a closed sketch or a flat face.\n"))

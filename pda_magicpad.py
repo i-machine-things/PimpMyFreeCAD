@@ -75,6 +75,14 @@ def _base(obj):
     return _moved_by(b.Shape, _to_local(obj, b))
 
 
+def _element(o, sub):
+    """Nesnenin alt elemani, nesnenin Shape'i ile ayni koordinatta. Sketch'in icine tiklamak (FreeCAD 1.1 / 27.1)
+    "InternalFaceN" verir: o yuzler Shape'te degil InternalShape'tedir, getElement bulamaz."""
+    if sub.startswith("InternalFace"):
+        return Part.getShape(o, sub, needSubElement=True)
+    return o.Shape.getElement(sub)
+
+
 def profile(obj):
     """Profil: (yuz, merkez, dis normal, sketch orijini, govdenin uzerinde mi) ya da hata metni. Yuz, sketch'in
     kapali tellerinden (delikler dahil) ya da secilen duz yuzden; govde koordinatinda."""
@@ -86,8 +94,13 @@ def profile(obj):
     fsubs = [s for s in subs if s.startswith("Face")]
     if fsubs:                                              # yuz(ler): her biri kendi normaliyle (bkz. _multi_tool)
         return _multi_profile(o, fsubs, pl, obj)
+    isubs = [s for s in subs if s.startswith("InternalFace")]
     try:
-        if subs and subs[0].startswith("Face"):
+        if isubs:                                          # sketch'te tiklanan bolge(ler): yalniz o(nlar), delikleriyle
+            fs = [_element(o, s) for s in isubs]
+            face = fs[0] if len(fs) == 1 else Part.makeCompound(fs)
+            origin = o.Placement.Base if _sketch(o) else _centroid(face)
+        elif subs and subs[0].startswith("Face"):
             face = o.Shape.getElement(subs[0])
             origin = _centroid(face)
         else:
@@ -176,7 +189,7 @@ def custom_dir(obj):
         return None
     o, subs = link[0], [x for x in (link[1] or []) if x]
     try:
-        sh = o.Shape.getElement(subs[0]) if subs else o.Shape
+        sh = _element(o, subs[0]) if subs else o.Shape
         pl = App.Placement()
         g = o.getParentGeoFeatureGroup()
         if g is not None:
@@ -709,7 +722,7 @@ def target_shape(obj):
     if not link or link[0] is None:
         return None
     o, subs = link[0], [x for x in (link[1] or []) if x]
-    sh = o.Shape.getElement(subs[0]) if subs else o.Shape
+    sh = _element(o, subs[0]) if subs else o.Shape
     sh = sh.copy()
     pl = App.Placement()
     g = o.getParentGeoFeatureGroup()
@@ -1161,7 +1174,7 @@ def make_part(doc, prof_obj, subs=None):
     obj = doc.addObject("Part::FeaturePython", "MagicPad")
     MagicPad(obj)
     obj.Profile = (prof_obj, list(subs or []))
-    if subs:
+    if any(x.startswith("Face") for x in subs or []):      # katinin yuzu (sketch bolgesi degil)
         ref = prof_obj
         g = prof_obj.getParentGeoFeatureGroup()
         if g is not None and g.isDerivedFrom("PartDesign::Body"):
