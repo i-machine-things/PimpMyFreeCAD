@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Dome
+
+- **Apply button.** The dome is no longer rebuilt on every change of the height or the options, which made the system
+  sluggish on large bodies. Changes are marked in the panel and applied with Apply (or OK).
+
 ### Rail Pipe
 
 - **Fix: a closed loop inside a sketch can be a profile on its own.** Clicking the circle inside a square (its line,

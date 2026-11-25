@@ -201,6 +201,8 @@ TR = {
         'Kubbe: dış çizgide yüzey için fazla dar bölgeler var',
     'Dome: the dome runs into another part of the solid; lower the height':
         'Kubbe: kubbe katının başka bir yerine giriyor; yüksekliği azaltın',
+    'Not applied yet: press Apply (or OK) to rebuild the dome':
+        'Henüz uygulanmadı: kubbeyi yeniden oluşturmak için Apply (ya da OK) düğmesine basın',
     'Tangent error at the edges: %.3f degrees':
         'Kenarlarda teğet hatası: %.3f derece',
     '%d edge(s) next to a steep wall are not tangent':
