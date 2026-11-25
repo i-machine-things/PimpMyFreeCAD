@@ -129,6 +129,12 @@ def profile(link, glob=False):
     o, subs = link[0], list(link[1] or [])
     if _is_sketch(o) and subs and subs[0].startswith("Edge"):
         return _sketch_loop_profile(o, subs, glob)
+    if _is_sketch(o) and subs and subs[0].startswith("InternalFace"):
+        f = _internal_face(o, subs[0])
+        if f is None:
+            return "Rail Pipe: the start face is missing"
+        pl = o.getGlobalPlacement() if glob else o.Placement
+        return f.OuterWire, Part.Face(f.OuterWire).CenterOfMass, pl.Rotation.multVec(V(0, 0, 1)), False
     if _is_sketch(o):
         w = _closed_wire(_shape(o, None, glob))
         if w is None:
@@ -163,6 +169,16 @@ def profile(link, glob=False):
         return "Rail Pipe: the start face must be flat"
     c, n = face_frame(f)
     return f.OuterWire, c, n, bool(sh.Solids)
+
+
+def _internal_face(o, sub):
+    """Sketch'in ic yuzu (FreeCAD 1.1+ / 27.1: 3B gorunumde sketch'in icine tiklamak "InternalFaceN" verir; sketch'in
+    Shape'inde yuz yoktur, yuzler InternalShape'tedir). Sketch'in Shape'i ile ayni koordinatta; yoksa None."""
+    try:
+        f = Part.getShape(o, sub, needSubElement=True)
+        return f if not f.isNull() and f.ShapeType == "Face" else None
+    except Exception:
+        return None
 
 
 def _sketch_loop_profile(o, subs, glob):
@@ -216,6 +232,9 @@ def profile_holes(link, glob=False):
     try:
         if _is_sketch(o) and subs and subs[0].startswith("Edge"):
             return []                                      # sketch'te secilen tek halka: deliksiz
+        if _is_sketch(o) and subs and subs[0].startswith("InternalFace"):
+            f = _internal_face(o, subs[0])                 # tiklanan ic yuz: kendi delikleri (karenin icindeki daire)
+            return [] if f is None else [w for w in f.Wires if not w.isSame(f.OuterWire)]
         if _is_sketch(o):
             if not getattr(o, "MakeInternals", False):
                 return []

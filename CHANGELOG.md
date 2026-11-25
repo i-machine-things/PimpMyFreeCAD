@@ -4,10 +4,11 @@
 
 ### Rail Pipe
 
-- **Fix: a closed loop inside a sketch can be a profile on its own.** Clicking the circle inside a square (in the 3D
-  view) now uses that circle as the profile instead of the whole sketch, where it was the square's hole and the pipe
-  failed with "the start and end profiles must have the same number of holes". Clicking the outer loop, or selecting
-  the sketch in the tree, still uses the whole sketch with its holes.
+- **Fix: a closed loop inside a sketch can be a profile on its own.** Clicking the circle inside a square (its line,
+  or inside it on FreeCAD 1.1 / 27.1, where sketches have faces) now uses that circle as the profile instead of the
+  whole sketch, where it was the square's hole and the pipe failed with "the start and end profiles must have the same
+  number of holes". Clicking inside the square uses the square with its hole; selecting the sketch in the tree still
+  uses the whole sketch.
 
 ### Magic Pad
 

@@ -36,8 +36,11 @@ class _RailPipe:
         prof = []               # (nesne, "FaceN"), kapali kenarlar icin (nesne, ["EdgeN", ...]), sketch icin (sketch, None)
         for so in Gui.Selection.getSelectionEx():
             if pda_railpipe._is_sketch(so.Object):        # sketch: kenarina tiklanmis ya da agacta secili
+                faces = [s for s in so.SubElementNames if s.startswith("InternalFace")]
                 inner = _sketch_inner_loops(so)
-                if inner:                                  # ic halkaya (or. karenin icindeki daire) tiklandi
+                if faces:                                  # sketch'in icine tiklandi (27.1): tiklanan yuz, delikleriyle
+                    prof += [(so.Object, s) for s in faces]
+                elif inner:                                # ic halkaya (or. karenin icindeki daire) tiklandi
                     prof += inner
                 elif all(p[0] is not so.Object for p in prof):
                     prof.append((so.Object, None))
