@@ -1015,6 +1015,10 @@ def classify(selection):
     for so in selection:
         o = so.Object
         if rp._is_sketch(o):
+            faces = [s for s in so.SubElementNames if s.startswith("InternalFace")]
+            if faces:                                      # sketch'in icine tiklandi (1.1 / 27.1): o bolge, delikleriyle
+                prof += [(o, [s]) for s in faces]
+                continue
             target = prof if rp._closed_wire(o.Shape) is not None else guides
             if all(p[0] is not o for p in target):
                 target.append((o, []))

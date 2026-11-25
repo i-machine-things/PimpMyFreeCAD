@@ -15,6 +15,11 @@
   number of holes". Clicking inside the square uses the square with its hole; selecting the sketch in the tree still
   uses the whole sketch.
 
+### Magic Loft
+
+- **Fix: clicking inside a sketch (FreeCAD 1.1 / 27.1) uses only that region as a profile**, with its holes, instead of
+  the whole sketch. Selecting the sketch in the tree still uses all of it.
+
 ### Magic Pad
 
 - **Fix: the arrow could only be grabbed on its lower half.** The grab area now covers the whole arrow, from the knob to
