@@ -36,7 +36,10 @@ class _RailPipe:
         prof = []               # (nesne, "FaceN"), kapali kenarlar icin (nesne, ["EdgeN", ...]), sketch icin (sketch, None)
         for so in Gui.Selection.getSelectionEx():
             if pda_railpipe._is_sketch(so.Object):        # sketch: kenarina tiklanmis ya da agacta secili
-                if all(p[0] is not so.Object for p in prof):
+                inner = _sketch_inner_loops(so)
+                if inner:                                  # ic halkaya (or. karenin icindeki daire) tiklandi
+                    prof += inner
+                elif all(p[0] is not so.Object for p in prof):
                     prof.append((so.Object, None))
             elif so.SubElementNames:
                 prof += [(so.Object, sub) for sub in so.SubElementNames if sub.startswith("Face")]
@@ -76,7 +79,7 @@ class _RailPipe:
         doc.recompute()
         doc.commitTransaction()
         for p in prof:                                     # PartDesign gibi: kullanilan sketch'ler gizlenir
-            if p[1] is None:
+            if p[1] is None or pda_railpipe._is_sketch(p[0]):
                 p[0].ViewObject.Visibility = False
         if "Invalid" in new.State:
             App.Console.PrintWarning(T("Rail Pipe: the first sweep failed; adjust GuidePoints in the property "
@@ -291,6 +294,25 @@ def _edge_profiles(so):
     edges = {n: so.Object.Shape.getElement(n) for n in names}
     return [(so.Object, [n for n, e in edges.items() if any(e.isSame(x) for x in w.Edges)])
             for w in pda_railpipe.edge_loops(list(edges.values()))]
+
+
+def _sketch_inner_loops(so):
+    """Sketch'te tiklanan kenarlardan, sketch'in dis teli olmayan kapali halkalar: her biri ayri profil
+    (sketch, ["EdgeN", ...]). Dis tele (kareye) ya da tek telli sketch'e tiklamak eskisi gibi butun sketch'tir."""
+    import pda_railpipe
+    loops = _edge_profiles(so)
+    if not loops:
+        return []
+    outer = pda_railpipe._closed_wire(so.Object.Shape)
+    if outer is None or len([w for w in so.Object.Shape.Wires if w.isClosed()]) < 2:
+        return []
+    res = []
+    for o, names in loops:
+        es = [so.Object.Shape.getElement(n) for n in names]
+        if len(es) == len(outer.Edges) and all(any(e.isSame(x) for x in outer.Edges) for e in es):
+            continue                                       # dis tel: butun sketch (delikleriyle)
+        res.append((o, names))
+    return res
 
 
 def _workbench():

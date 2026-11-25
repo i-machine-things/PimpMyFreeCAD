@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Rail Pipe
+
+- **Fix: a closed loop inside a sketch can be a profile on its own.** Clicking the circle inside a square (in the 3D
+  view) now uses that circle as the profile instead of the whole sketch, where it was the square's hole and the pipe
+  failed with "the start and end profiles must have the same number of holes". Clicking the outer loop, or selecting
+  the sketch in the tree, still uses the whole sketch with its holes.
+
 ### Magic Pad
 
 - **Fix: the arrow could only be grabbed on its lower half.** The grab area now covers the whole arrow, from the knob to

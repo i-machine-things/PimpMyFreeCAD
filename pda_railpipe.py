@@ -127,6 +127,8 @@ def profile(link, glob=False):
     if not link or link[0] is None:
         return None
     o, subs = link[0], list(link[1] or [])
+    if _is_sketch(o) and subs and subs[0].startswith("Edge"):
+        return _sketch_loop_profile(o, subs, glob)
     if _is_sketch(o):
         w = _closed_wire(_shape(o, None, glob))
         if w is None:
@@ -163,6 +165,22 @@ def profile(link, glob=False):
     return f.OuterWire, c, n, bool(sh.Solids)
 
 
+def _sketch_loop_profile(o, subs, glob):
+    """Sketch'te secilen kapali halka (or. karenin icindeki daire): tek basina profil, delik degil. Normal sketch'in
+    Z'si; delikleri yok (profile_holes)."""
+    sh = _shape(o, None, glob)
+    try:
+        edges = [sh.getElement(s) for s in subs]
+    except Exception:
+        return "Rail Pipe: the selected edges must form one closed loop"
+    loops = edge_loops(edges)
+    if len(loops) != 1 or sum(len(w.Edges) for w in loops) != len(edges):
+        return "Rail Pipe: the selected edges must form one closed loop"
+    w = loops[0]
+    pl = o.getGlobalPlacement() if glob else o.Placement
+    return w, Part.Face(w).CenterOfMass, pl.Rotation.multVec(V(0, 0, 1)), False
+
+
 def _inner_loops(sh):
     """Sekildeki kapali tellerden, en buyuk (dis) telin dogrudan icindekiler (delikler). Ic ice ucuncu kat (deligin
     icindeki ada) atlanir: yalniz tam bir tel icinde olanlar delik sayilir."""
@@ -196,6 +214,8 @@ def profile_holes(link, glob=False):
         return []
     o, subs = link[0], list(link[1] or [])
     try:
+        if _is_sketch(o) and subs and subs[0].startswith("Edge"):
+            return []                                      # sketch'te secilen tek halka: deliksiz
         if _is_sketch(o):
             if not getattr(o, "MakeInternals", False):
                 return []
