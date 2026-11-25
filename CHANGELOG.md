@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.5.1 (2026-11-25)
+
+### Magic Pad
+
+- **Fix: the value box next to the arrow opened black and empty on FreeCAD 27.1 (Qt 6.11).** The number was there but had
+  no room to be drawn. The box now shows the value and selects it for typing; lengths with units work too (`1 in`,
+  `2 cm`; a plain number is mm). A value that cannot be read keeps the box open with a red frame.
+- **New: Offset for the Up to modes** (Up to body, first face, last face, face and shape). Positive goes past the target,
+  negative stops before it. The field takes FreeCAD expressions (fx); Magic Pads made with 0.5.0 get it when they are
+  edited.
+
 ## 0.5.0 (2026-11-24)
 
 ### New: Magic Pad
