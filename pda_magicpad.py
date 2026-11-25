@@ -884,6 +884,8 @@ def _upto(obj, prof, base, mode):
     n = -d if obj.Reversed else d
     names = {"UpToBody": "Up to body", "UpToFirst": "Up to first face", "UpToLast": "Up to last face",
              "UpToFace": "Up to face", "UpToShape": "Up to shape"}
+    off = offset(obj)
+    sh = (lambda s: _shifted(s, n, off)) if abs(off) > 1e-9 else (lambda s: s)
     try:
         if mode in TARGET:
             tgt = target_shape(obj)
@@ -892,23 +894,39 @@ def _upto(obj, prof, base, mode):
             if mode == "UpToShape":
                 if not tgt.Solids:
                     return "Magic Pad: Up to shape: the target has no solid; use Up to face"
-                return up_to_body(obj, face, c, n, tgt, origin)
+                return up_to_body(obj, face, c, n, sh(tgt), origin)
             tf = tgt.Faces[0] if tgt.Faces else None
             if tf is None:
                 return "Magic Pad: Up to face: the target is not a face"
-            return up_to_face(obj, face, c, n, base, origin, tf)
+            return up_to_face(obj, face, c, n, base, origin, sh(tf))
         if base is None or base.isNull():
             return T("Magic Pad: %s needs a solid in the Body") % T(names[mode])
         if mode == "UpToBody":
-            return up_to_body(obj, face, c, n, base, origin)
+            return up_to_body(obj, face, c, n, sh(base), origin)
         if mode == "UpToLast":
-            return up_to_last(obj, face, c, n, base, origin)
+            return up_to_last(obj, face, c, n, sh(base), origin)
         ff = first_face(face, c, n, base)
         if ff is None:
             return "Magic Pad: Up to first: the Body is not in front of the profile (try Reversed)"
-        return up_to_face(obj, face, c, n, base, origin, ff, "Up to first face")
+        return up_to_face(obj, face, c, n, base, origin, sh(ff), "Up to first face")
     except Exception as e:
         return T("Magic Pad: %s failed (%s)") % (T(names[mode]), e)
+
+
+def offset(obj):
+    """Yukari kadar modlarinda hedefin kaydirilmasi (mm): arti hedefin otesine gecer, eksi hedeften once durur."""
+    try:
+        return float(getattr(obj, "Offset", 0.0))
+    except Exception:
+        return 0.0
+
+
+def _shifted(sh, n, d):
+    """Hedef (yuz ya da kati) cekme yonu boyunca d kadar kaydirilmis kopya: arac kaydirilmis hedefe kadar gider. Govde
+    kaydirilinca bile boolean gercek govdeyle yapilir (compute'taki base degismez)."""
+    sh = sh.copy()
+    sh.translate(n * d)
+    return sh
 
 
 MISS = ["Cut", "Length"]
@@ -962,6 +980,10 @@ def miss_prop(obj):
         obj.addProperty("App::PropertyEnumeration", "Miss", "Magic Pad",
                         "Up to body: the part of the profile that does not meet the Body is cut off, or goes to Length")
         obj.Miss = MISS
+    if "Offset" not in obj.PropertiesList:
+        obj.addProperty("App::PropertyDistance", "Offset", "Magic Pad",
+                        "Up to modes: shifts where the feature stops; positive goes past the target, negative stops "
+                        "before it")
 
 
 class MagicPad:

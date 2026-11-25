@@ -56,19 +56,41 @@ def sm_graphics_view(view):
     return gv
 
 
-class _ValueEdit(QtWidgets.QDoubleSpinBox):
-    """Okun yanindaki yazinin yerinde acilan sayi alani: Enter / Return uygular, Esc vazgecer."""
+class _ValueEdit(QtWidgets.QLineEdit):
+    """Okun yanindaki yazinin yerinde acilan sayi alani: Enter / Return uygular, Esc vazgecer. QDoubleSpinBox degil:
+    FreeCAD 27.1 (Qt 6.11) altinda dugmesiz + stil verilmis spin box'in ic yazi alani 1 piksele cokuyordu (olculdu),
+    kutu bos ve siyah gorunuyordu. Birim de yazilabilir ("1 in", "2 cm"); birimsiz sayi mm."""
 
     def __init__(self, parent, done):
         super(_ValueEdit, self).__init__(parent)
         self.done = done
         self.closed = False
-        self.setRange(-1e6, 1e6)
-        self.setDecimals(2)
-        self.setSuffix(" mm")
-        self.setButtonSymbols(QtWidgets.QAbstractSpinBox.NoButtons)
-        self.setStyleSheet("QDoubleSpinBox { background: #18181c; color: #ff8c28; border: 1px solid #ff8c28; "
-                           "border-radius: 4px; padding: 2px 6px; font-weight: bold; }")
+        self.setStyleSheet("QLineEdit { background: #18181c; color: #ff8c28; border: 1px solid #ff8c28; "
+                           "border-radius: 4px; padding: 2px 6px; font-weight: bold; "
+                           "selection-background-color: #ff8c28; selection-color: #18181c; }")
+
+    def setValue(self, v):
+        try:
+            self.setText(App.Units.Quantity(float(v), App.Units.Length).UserString)
+        except Exception:
+            self.setText("%.2f mm" % float(v))
+
+    def value(self):
+        """Yazilan deger (mm) ya da okunamazsa None."""
+        t = self.text().strip()
+        if not t:
+            return None
+        try:
+            q = App.Units.Quantity(t)
+            if q.Unit == App.Units.Unit():                 # birimsiz: mm
+                return float(q.Value)
+            return float(q.getValueAs("mm"))
+        except Exception:
+            pass
+        try:
+            return float(t.lower().replace("mm", "").replace(",", ".").strip())
+        except Exception:
+            return None
 
     def _finish(self, value):
         if not self.closed:
@@ -78,8 +100,11 @@ class _ValueEdit(QtWidgets.QDoubleSpinBox):
     def keyPressEvent(self, ev):
         k = ev.key()
         if k in (QtCore.Qt.Key_Return, QtCore.Qt.Key_Enter):
-            self.interpretText()
-            self._finish(self.value())
+            v = self.value()
+            if v is None:                                  # okunamadi: alan acik kalir, cerceve kirmizi
+                self.setStyleSheet(self.styleSheet().replace("1px solid #ff8c28", "1px solid #d9534f"))
+                return
+            self._finish(v)
             return
         if k == QtCore.Qt.Key_Escape:
             self._finish(None)
@@ -274,8 +299,8 @@ class Gizmo(object):
         H = self.view.getSize()[1]
         e = _ValueEdit(vp, self._edit_done)
         e.setValue(self.value_for_edit)
-        e.adjustSize()
-        e.resize(max(e.width(), 120), e.height())
+        fm = e.fontMetrics()
+        e.resize(max(fm.horizontalAdvance(e.text() + "000") + 24, 120), max(e.sizeHint().height(), fm.height() + 10))
         e.move(int(c[0] / dpr - e.width() / 2.0), int((H - c[1]) / dpr - e.height() / 2.0))
         e.show()
         e.setFocus()
@@ -411,6 +436,7 @@ class Editor(object):
         self.error = None
         self.prof = None
         self.doc.openTransaction(T("Edit Magic Pad"))
+        mp.miss_prop(obj)                                  # eski surumle yapilmis nesnelere yeni ozellikler (Offset)
         self.parent = sm._scene_parent(self.view)
         self._nodes()
         self.gizmo = Gizmo(self.view, self.parent, self.on_gizmo, self.end_drag, self.set_length, self.flip)
@@ -770,6 +796,11 @@ class Panel(object):
         self.miss_label = QtWidgets.QLabel(T("Missed part"))
         self.miss.setToolTip(T("Up to body: what happens to the part of the profile that does not meet the Body"))
         f.addRow(self.miss_label, self.miss)
+        self.offset = self._qspin("Offset", "mm", -1e6, 1e6)
+        self.offset.setToolTip(T("Shifts where the feature stops: positive goes past the target, negative stops "
+                                 "before it"))
+        self.off_label = QtWidgets.QLabel(T("Offset to the target"))
+        f.addRow(self.off_label, self.offset)
         self.pick = QtWidgets.QPushButton(T("Select..."))
         self.pick.setCheckable(True)
         self.pick.setToolTip(T("Then click the face (Up to face) or the solid (Up to shape) in the 3D view"))
@@ -859,7 +890,7 @@ class Panel(object):
         self.timer.setInterval(120)
         self.timer.timeout.connect(self.apply)
         self.sync()
-        for s in (self.length, self.length2, self.taper, self.twist):
+        for s in (self.length, self.length2, self.offset, self.taper, self.twist):
             self._connect_spin(s)
         for c in (self.mode, self.miss, self.center, self.opmode, self.dirmode, self.sides):
             c.currentIndexChanged.connect(lambda i: self._later())
@@ -919,10 +950,10 @@ class Panel(object):
         self.syncing = True
         try:
             self.mode.setCurrentIndex(max(self.mode.findData(o.Mode), 0))
-            for w, prop in ((self.length, "Length"), (self.length2, "Length2"), (self.taper, "TaperAngle"),
-                            (self.twist, "Twist")):
+            for w, prop in ((self.length, "Length"), (self.length2, "Length2"), (self.offset, "Offset"),
+                            (self.taper, "TaperAngle"), (self.twist, "Twist")):
                 if not w.hasFocus():
-                    self._set(w, float(getattr(o, prop)))
+                    self._set(w, float(getattr(o, prop, 0.0)))
             self.miss.setCurrentIndex(max(self.miss.findData(getattr(o, "Miss", "Cut")), 0))
             self.opmode.setCurrentIndex(max(self.opmode.findData(getattr(o, "OpMode", "Auto")), 0))
             self.dirmode.setCurrentIndex(max(self.dirmode.findData(getattr(o, "ExtrudeDir", "Normal")), 0))
@@ -939,6 +970,9 @@ class Panel(object):
         self.miss.setVisible(mode in ("UpToBody", "UpToShape"))
         self.miss_label.setVisible(mode in ("UpToBody", "UpToShape"))
         self.length.setEnabled(mode not in ("UpToFirst", "UpToLast", "UpToFace"))
+        upto = mode in ("UpToBody",) + mp.AUTO
+        self.offset.setVisible(upto)
+        self.off_label.setVisible(upto)
         tgt = mode in mp.TARGET
         self.pick.setVisible(tgt)
         self.target.setVisible(tgt)
@@ -980,8 +1014,8 @@ class Panel(object):
                     SideFaces=self.sides.currentData(),
                     TwistCenter=self.center.currentData(), TwistEase=self.ease.isChecked(),
                     Refine=self.refine.isChecked())
-        for w, prop in ((self.length, "Length"), (self.length2, "Length2"), (self.taper, "TaperAngle"),
-                        (self.twist, "Twist")):
+        for w, prop in ((self.length, "Length"), (self.length2, "Length2"), (self.offset, "Offset"),
+                        (self.taper, "TaperAngle"), (self.twist, "Twist")):
             if not has_expression(o, prop):                # ifade bagliysa deger ifadeden gelir
                 vals[prop] = self._get(w)
         for k, v in vals.items():

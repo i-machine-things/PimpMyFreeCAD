@@ -463,6 +463,10 @@ TR = {
         'Uzunluğa kadar git',
     'Missed part':
         'Değmeyen kısım',
+    'Offset to the target':
+        'Hedefe ofset',
+    'Shifts where the feature stops: positive goes past the target, negative stops before it':
+        'Özelliğin durduğu yeri kaydırır: artı hedefin ötesine geçer, eksi hedeften önce durur',
     'Up to body: what happens to the part of the profile that does not meet the Body':
         'Gövdeye kadar: profilin gövdeye değmeyen kısmına ne olacağı',
     'Reversed':
