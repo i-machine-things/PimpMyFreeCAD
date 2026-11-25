@@ -729,9 +729,49 @@ def _moved(sh, pl):
     return sh
 
 
-def extended(f, size, c):
+def _facing_arc(f, s, n, v, c=None, size=1e4):
+    """Silindir / koni: yuzun cekme yonune bakan tarafi ile ayni tarafta kalan u yayi (u0, u1), ya da None (tam cevre).
+    Yuz hangi yandan vuruluyorsa (dis bukey: on yuz; ic bukey, ornegin icinden bakilan boru: arka duvar) o yarim
+    tutulur: tam cevre, profile bakan sanal yarimi ile araci gercek yuzden once kesiyordu (ici bos obround'un icindeki
+    sketch'te Up to first face: duvar 175'te, arac 69'da duruyordu; olculdu). Taraf, c'den n yonundeki isinin gercek
+    yuzu ilk vurdugu noktadan; isin yuzu vurmuyorsa yuzun ortasindan (tam cevreli yuzde orta rastgele bir yandir)."""
+    u0, u1, v0, v1 = f.ParameterRange
+    um = (u0 + u1) / 2.0
+    if c is not None:
+        try:
+            sec = Part.LineSegment(c, c + n * size).toShape().section(f)
+            ts = [(p.Point - c).dot(n) for p in sec.Vertexes]
+            ts = [t for t in ts if t > 1e-9]
+            if ts:
+                um = s.parameter(c + n * min(ts))[0]
+        except Exception:
+            pass
+    m = s.normal(um, v)
+    k = m.dot(n)
+    if abs(k) < 1e-3:                                      # yon eksene paralel ya da yuz yana bakiyor: tam cevre
+        return None
+    sg = 1.0 if k > 0 else -1.0
+    N = 720
+    step = 2 * math.pi / N
+    good = lambda u: s.normal(u, v).dot(n) * sg > 1e-9
+    a = b = um
+    for _ in range(N // 2):
+        if not good(a - step):
+            break
+        a -= step
+    for _ in range(N // 2):
+        if not good(b + step):
+            break
+        b += step
+    if b - a >= 2 * math.pi - 2 * step:
+        return None
+    return a, b
+
+
+def extended(f, size, c, n=None):
     """Yuzun uzatilmis hali: duzlem sinirsiz duzlem gibi, silindir / koni ekseni boyunca, kure / tor tam yuzey; obur
-    yuzeyler (B-spline) kirpilmamis tam yuzeyleri."""
+    yuzeyler (B-spline) kirpilmamis tam yuzeyleri. n (cekme yonu) verilirse silindir / koni cevresi yalniz yuzun
+    vuruldugu yarimla sinirlanir (_facing_arc)."""
     s = f.Surface
     try:
         if isinstance(s, Part.Plane):
@@ -746,7 +786,9 @@ def extended(f, size, c):
                     vmin = max(vmin, apex_v + 1e-6)
                 else:
                     vmax = min(vmax, apex_v - 1e-6)
-            return s.toShape(0.0, 2 * math.pi, vmin, vmax)
+            arc = _facing_arc(f, s, n, v, c, 4 * size) if n is not None else None
+            ua, ub = arc if arc else (0.0, 2 * math.pi)
+            return s.toShape(ua, ub, vmin, vmax)
         if isinstance(s, (Part.Sphere, Part.Toroid)):
             return s.toShape()
         u0, u1, v0, v1 = s.bounds()
@@ -780,7 +822,7 @@ def _upto_split(obj, face, c, n, origin, far, split, what):
 def up_to_face(obj, face, c, n, base, origin, tf, what="Up to face"):
     """Secilen (uzatilmis) yuzeye kadar: profilden cikan arac yuzeyle bolunur, profile bagli parca tutulur."""
     far = max(_far(base, c, n), _far(tf, c, n))
-    sheet = extended(tf, 4 * far, c)
+    sheet = extended(tf, 4 * far, c, n)
     return _upto_split(obj, face, c, n, origin, far, _slicer(sheet), what)
 
 

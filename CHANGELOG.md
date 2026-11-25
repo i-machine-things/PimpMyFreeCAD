@@ -6,6 +6,9 @@
 
 - **Fix: the arrow could only be grabbed on its lower half.** The grab area now covers the whole arrow, from the knob to
   the tip of the cone.
+- **Fix: Up to first face / Up to face stopped too early on curved walls seen from inside** (a sketch inside a hollow
+  part, a tube). The cylinder or cone was extended all the way round, and its imaginary half on the profile's side cut
+  the feature before the real wall. Only the half the arrow actually hits is extended now.
 
 ## 0.5.1 (2026-11-25)
 
