@@ -19,6 +19,11 @@
 
 - **Fix: clicking inside a sketch (FreeCAD 1.1 / 27.1) uses only that region as a profile**, with its holes, instead of
   the whole sketch. Selecting the sketch in the tree still uses all of it.
+- **Fix: a loft starting from a whole face of the Body failed with "the boolean with the Body failed"** (for example
+  a second Magic Loft continuing from the end face of the first). The 0.5 mm overlap into the Body ran along the
+  neighbouring side wall, the fuse left dozens of sliver faces and Refine crashed. The overlap is now used only when it
+  stays inside the Body (a sketch in the middle of a face); otherwise the loft starts exactly on the face. If the
+  boolean still fails, it is tried once more without the overlap.
 
 ### Magic Pad
 

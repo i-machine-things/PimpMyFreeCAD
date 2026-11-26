@@ -894,7 +894,10 @@ def prepare(obj):
             # Yuzeye teget ucta uzanti yok: kesit normali boyunca uzanti, tegeti komsu yuze degil uzantiya uyduruyordu
             # (konide 29 derece sapma); boolean toleransi uzantisiz da temiz sonuc veriyor
             if p[3] and (obj.StartConstraint if k == 0 else obj.EndConstraint) != "Tangent":
-                tails[k] = min(0.5, 0.05 * p[0].BoundBox.DiagonalLength)
+                t = min(0.5, 0.05 * p[0].BoundBox.DiagonalLength)
+                nxt = secs[1] if k == 0 else secs[-2]
+                if _tail_inside(p, nxt.c - sec.c, t, base):
+                    tails[k] = t
     sk = Skin(secs, ends[0], ends[1], tails, max(float(obj.FitTolerance), 1e-4))
     sk.strength = (obj.StartStrength, obj.EndStrength)
     sk.spread = float(getattr(obj, "GuideSpread", 1.0))
@@ -927,6 +930,22 @@ def prepare(obj):
         if err:
             return err
     return sk
+
+
+def _tail_inside(p, ahead, depth, base):
+    """Uc uzantisi yalniz kesitin kenari uzatildiginda govdenin ICINDE kaliyorsa (kutu yuzunun ortasindaki sketch).
+    Profil govdenin butun bir yuzuyse (onceki Magic Loft'un uc yuzu) kenar govdenin kenarinda: uzanti komsu yan yuzeyle
+    neredeyse cakisiyor, fuse 29-69 kiymik yuz verip refine patliyordu (uzantisiz 11 yuz, temiz)."""
+    try:
+        n = p[2] if p[2].dot(V(*ahead)) < 0 else -p[2]   # govdeye dogru
+        n = n * depth
+        tol = max(0.05, 1e-4 * p[0].BoundBox.DiagonalLength)
+        for q in p[0].discretize(Number=25)[:24]:
+            if not base.isInside(q + n, tol, False):
+                return False
+        return True
+    except Exception:
+        return False
 
 
 def _add_holes(obj, sk, items, secs, tails, g, base):
@@ -1118,6 +1137,26 @@ class MagicLoft:
         if isinstance(sk, str):
             raise RuntimeError(sk)
         sub = obj.TypeId == "PartDesign::FeatureSubtractivePython"
+        res, tool = self._build(obj, sk, sub)
+        if res is None and any(sk.tails):                  # guvenlik agi: uc uzantisi olmadan bir kez daha
+            sk.tails = (0.0, 0.0)
+            for h in sk.holes:
+                h.tails = (0.0, 0.0)
+            sk.min_nu, sk.nu = 0, None
+            res, tool = self._build(obj, sk, sub)
+        if res is None:
+            raise RuntimeError(T("Magic Loft: the boolean with the Body failed"))
+        if sk.corner_mismatch and getattr(self, "warned", None) != obj.Name:
+            self.warned = obj.Name                         # olculdu: bu geciste Thickness sessizce et vermiyor
+            App.Console.PrintWarning(T("Magic Loft: a corner-to-round transition: PartDesign Thickness may give no "
+                                       "wall here. Cut the inside with a Magic Loft Cut instead.\n"))
+        if hasattr(obj, "AddSubShape"):
+            obj.AddSubShape = tool
+        obj.Shape = res[0]
+
+    def _build(self, obj, sk, sub):
+        """Arac kati + govdeyle boolean: ((sonuc, temiz), arac) ya da (None, arac)."""
+        res = tool = None
         for attempt in range(3):
             try:
                 tool = sk.solid()
@@ -1140,15 +1179,7 @@ class MagicLoft:
             if res is not None or sk.nu is None:
                 break
             sk.min_nu = sk.nu
-        if res is None:
-            raise RuntimeError(T("Magic Loft: the boolean with the Body failed"))
-        if sk.corner_mismatch and getattr(self, "warned", None) != obj.Name:
-            self.warned = obj.Name                         # olculdu: bu geciste Thickness sessizce et vermiyor
-            App.Console.PrintWarning(T("Magic Loft: a corner-to-round transition: PartDesign Thickness may give no "
-                                       "wall here. Cut the inside with a Magic Loft Cut instead.\n"))
-        if hasattr(obj, "AddSubShape"):
-            obj.AddSubShape = tool
-        obj.Shape = res[0]
+        return res, tool
 
     def onDocumentRestored(self, obj):
         spread_prop(obj)
