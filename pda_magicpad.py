@@ -156,12 +156,13 @@ def _multi_profile(o, fsubs, pl=None, obj=None):
     try:
         for sub in fsubs:
             f = _moved_by(o.Shape.getElement(sub), pl or App.Placement())
-            if not isinstance(f.Surface, Part.Plane):
-                return "Magic Pad: the profile must be flat"
             u0, u1, v0, v1 = f.ParameterRange
             n = f.normalAt((u0 + u1) / 2, (v0 + v1) / 2)    # kati yuzu: yonelimi disari
             n.normalize()
-            parts.append((f, _centroid(f), n))
+            # egri yuz (silindir, B-spline...): yon ortadaki normal (baska yon: Direction > Custom); merkez yuzun
+            # ustunde (agirlik merkezi egri yuzde katinin icinde kalir, ok havada dururdu)
+            c = _centroid(f) if _flat(f) else f.valueAt((u0 + u1) / 2, (v0 + v1) / 2)
+            parts.append((f, c, n))
     except Exception as e:
         return T("Magic Pad: the profile could not be read (%s)") % e
     f0, c0, n0 = parts[0]
@@ -169,6 +170,10 @@ def _multi_profile(o, fsubs, pl=None, obj=None):
 
 
 DIRS = ["Normal", "Average", "Custom"]
+
+
+def _flat(shape):
+    return all(isinstance(f.Surface, Part.Plane) for f in shape.Faces)
 
 
 def direction(obj, prof, n):
@@ -228,11 +233,13 @@ def custom_dir(obj):
         return None
 
 
-def _bent(obj, d, n):
+def _bent(obj, d, n, face=None):
     """Yon normalden farkliysa: egim / twist ve golgeye dayali modlar (govdeye / sekle kadar) kullanilamaz. Ozel yon
     secilmemisse ya da yuzun duzleminde kaliyorsa hata."""
     if getattr(obj, "ExtrudeDir", "Normal") == "Custom" and custom_dir(obj) is None:
         return "Magic Pad: select the direction (a straight edge, a flat face or a datum axis)"
+    if face is not None and not _flat(face) and (abs(float(obj.TaperAngle)) > 1e-9 or abs(float(obj.Twist)) > 1e-9):
+        return "Magic Pad: taper and twist need a flat profile"
     if abs(d.dot(n)) < 0.02:
         return "Magic Pad: the direction lies in the plane of the face"
     if (d - n).Length < 1e-7:
@@ -259,6 +266,8 @@ def _corners(obj, parts, base):
         for j in range(i + 1, len(parts)):
             fi, ci, ni = parts[i]
             fj, cj, nj = parts[j]
+            if not (_flat(fi) and _flat(fj)):              # kama duzlem kesisimiyle kurulur
+                continue
             n1, n2 = ni * sgn, nj * sgn
             if n1.cross(n2).Length < 1e-6:                 # ayni duzlem: prizmalar zaten bitisik
                 continue
@@ -287,6 +296,8 @@ def _follow(obj, k, parts, base, tool):
     if base is None or base.isNull() or getattr(obj, "SideFaces", "Neighbours") != "Neighbours":
         return tool
     f, c, nf, n = parts[k]                                 # yuz, merkez, yuz normali, cekme yonu
+    if not _flat(f):                                       # kenara dik yon yuzun tek normaliyle hesaplanir
+        return tool
     sel = [p[0] for p in parts]
     sgn = -1.0 if obj.Reversed else 1.0
     n = n * sgn
@@ -508,7 +519,7 @@ def build_tool(obj, prof, base):
     once (bkz. up_to_body)."""
     face, c, n, origin, on_body = prof[:5]
     d = direction(obj, prof, n)
-    err = _bent(obj, d, n)
+    err = _bent(obj, d, n, face)
     if err:
         return err
     n = d
@@ -530,7 +541,8 @@ def _solid(obj, face, c, n, origin, z0, z1, span=None):
     if abs(tw) < 1e-9 and abs(taper) < 1e-9:
         f = face.copy()
         f.translate(n * z0)
-        return f.extrude(n * (z1 - z0))
+        tool = f.extrude(n * (z1 - z0))
+        return tool if _flat(face) else _plane_walls(tool)
     center = origin if obj.TwistCenter == "Sketch origin" else c
     center = center + n * (center - c).dot(n) * -1.0     # merkez profil duzleminde
     tools = []
@@ -550,6 +562,37 @@ def _solid(obj, face, c, n, origin, z0, z1, span=None):
     tool = tools[0]
     for t in tools[1:]:
         tool = tool.fuse(t)
+    return tool
+
+
+def _plane_walls(tool):
+    """Egri profil cekilince egri kenarin supurdugu duz duvar (yay / B-spline kenar duzleminde cekilir) OCC'de
+    SurfaceOfExtrusion olur: Refine onu govdenin ayni duzlemdeki yuzuyle birlestiremez, ustte eski kenar cizgi kalir.
+    Duz olanlar gercek duzlem yuze cevrilir (ayni teller: kenarlar paylasilir); hacim tutmazsa arac aynen doner."""
+    try:
+        out, changed = [], False
+        for g in tool.Faces:
+            if not isinstance(g.Surface, Part.Plane):
+                pl = g.findPlane(1e-7 * max(g.BoundBox.DiagonalLength, 1.0))
+                if pl is not None:
+                    # Part.Face(tel) kenarin eski yuzeyini (pcurve) yeniden kullanir: duzlem acikca verilir
+                    h = Part.Face(pl, g.OuterWire)
+                    if len(g.Wires) > 1:
+                        h = h.cut([Part.Face(pl, w) for w in g.Wires if not w.isSame(g.OuterWire)]).Faces[0]
+                    if isinstance(h.Surface, Part.Plane) and abs(h.Area - g.Area) <= 1e-6 * max(g.Area, 1.0):
+                        out.append(h)
+                        changed = True
+                        continue
+            out.append(g)
+        if not changed:
+            return tool
+        sol = Part.Solid(Part.Shell(out))
+        if sol.Volume < 0:
+            sol.reverse()
+        if sol.isValid() and abs(sol.Volume - tool.Volume) <= 1e-6 * max(tool.Volume, 1.0):
+            return sol
+    except Exception:
+        pass
     return tool
 
 
@@ -816,12 +859,72 @@ def extended(f, size, c, n=None):
             return s.toShape(ua, ub, vmin, vmax)
         if isinstance(s, (Part.Sphere, Part.Toroid)):
             return s.toShape()
+        if isinstance(s, Part.SurfaceOfExtrusion):          # egri cekilmis yuzey: egri kendi egriligiyle uzatilir
+            sh = _extrusion_sheet(f, s, size, c)
+            if sh is not None:
+                return sh
         u0, u1, v0, v1 = s.bounds()
         if all(abs(x) < 1e50 for x in (u0, u1, v0, v1)):
             return s.toShape(u0, u1, v0, v1)
     except Exception:
         pass
     return f.copy()
+
+
+def _curve_tail(cu, u, outward, size, maxang=math.pi / 2):
+    """Egrinin u ucundan disari devami: uctaki egrilik cemberi boyunca yay (en cok maxang; geri kivrilmasin), kalan boy
+    teget dogru. Egrilik yoksa yalniz dogru. Kenar listesi."""
+    p = cu.value(u)
+    t = cu.tangent(u)[0]
+    if not outward:
+        t = -t
+    t.normalize()
+    k = 0.0
+    try:
+        k = cu.curvature(u)
+    except Exception:
+        pass
+    out = []
+    left = size
+    if k > 1e-9 and 1.0 / k < 1e7:
+        r = 1.0 / k
+        m = cu.centerOfCurvature(u) - p
+        m = m - t * m.dot(t)
+        if m.Length > 1e-9:
+            m.normalize()
+            ctr = p + m * r
+            ang = min(size / r, maxang)
+            ax = t.cross(m)
+            rot = lambda a: App.Rotation(ax, math.degrees(a))
+            q1 = ctr + rot(ang / 2).multVec(p - ctr)
+            q2 = ctr + rot(ang).multVec(p - ctr)
+            out.append(Part.Arc(p, q1, q2).toShape())
+            p = q2
+            t = rot(ang).multVec(t)
+            left = size - r * ang
+    if left > 1e-6:
+        out.append(Part.LineSegment(p, p + t * left).toShape())
+    return out
+
+
+def _extrusion_sheet(f, s, size, c):
+    """Egri cekilmis yuzey (SurfaceOfExtrusion, ornegin B-spline egriden Extrude): yuzun egri parcasi iki ucundan
+    egriligiyle uzatilir (_curve_tail), cekme yonunde c etrafinda +-size. Yuzey kabugu ya da None."""
+    try:
+        cu = s.BasisCurve
+        d = V(s.Direction)
+        d.normalize()
+        u0, u1 = f.ParameterRange[:2]
+        edges = list(reversed(_curve_tail(cu, u0, False, size)))
+        edges.append(cu.toShape(u0, u1))
+        edges += _curve_tail(cu, u1, True, size)
+        w = Part.Wire(Part.__sortEdges__(edges))
+        vc = s.parameter(c)[1]
+        w.translate(d * (vc - size))                       # yuzey: C(u) + v * d
+        sheet = w.extrude(d * (2 * size))
+        return sheet if sheet.Faces else None
+    except Exception:
+        return None
 
 
 def _slicer(sheet):
@@ -945,7 +1048,7 @@ def compute(obj, trim=True, prof=None):
 def _upto(obj, prof, base, mode):
     face, c, n, origin = prof[0], prof[1], prof[2], prof[3]
     d = direction(obj, prof, n)
-    err = _bent(obj, d, n)
+    err = _bent(obj, d, n, face)
     if err:
         return err
     n = -d if obj.Reversed else d

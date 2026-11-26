@@ -605,6 +605,8 @@ TR = {
         'Düz bir kenar, düz bir yüz ya da datum ekseni seçin',
     'Magic Pad: taper and twist need the face normal as the direction':
         'Magic Pad: eğim ve burulma için yön yüz normali olmalı',
+    'Magic Pad: taper and twist need a flat profile':
+        'Magic Pad: eğim ve burulma düz bir profil gerektirir',
     'Magic Pad: Up to body / Up to shape need the face normal as the direction':
         'Magic Pad: Gövdeye kadar / Şekle kadar için yön yüz normali olmalı',
     'Magic Pad: select the direction (a straight edge, a flat face or a datum axis)':

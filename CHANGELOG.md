@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+### Magic Pad
+
+- **Up to face: an extruded curve surface is extended along its own curvature.** A target made by extruding a
+  B-spline (or any) curve was used only as far as it was drawn, so a profile beside it failed with "the target is not
+  in front of the profile". The curve now continues from both ends along its end curvature (an arc of at most 90
+  degrees, then the tangent line) and the surface runs on in its extrusion direction.
+- **A curved face can be a profile.** A cylinder or B-spline face of the Body is padded like a flat one: along the
+  normal at its middle, or along any direction chosen with Direction > Custom (an axis, edge or flat face). Taper and
+  twist still need a flat profile. Flat walls swept by its curved edges are made true planes, so Refine merges them
+  with the neighbouring top / bottom faces (no leftover seam line).
+
 ## 0.5.2 (2026-11-26)
 
 ### Body Sweep
