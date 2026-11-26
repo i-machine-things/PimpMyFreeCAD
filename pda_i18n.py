@@ -67,6 +67,8 @@ TR = {
         "Işın izleme: birleştirilmiş uçlar (daha yavaş)",
     "Ray-traced: coarse fused ends":
         "Işın izleme: kaba birleştirilmiş uçlar",
+    "Ray-traced: closed path, no caps":
+        "Işın izleme: kapalı yol, kapaksız",
     "Ray-traced: ?":
         "Işın izleme: ?",
     "Experimental tool":

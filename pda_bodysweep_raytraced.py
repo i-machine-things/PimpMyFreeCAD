@@ -60,15 +60,24 @@ class PathFrames:
         self.L = wire.Length
         n = max(60, int(math.ceil(self.L / step)))
         pts = wire.discretize(Number=n + 1)
-        if (pts[-1] - tool_center).Length < (pts[0] - tool_center).Length:
+        # kapali yol: bas ve son ayni nokta; yol aletin oldugu yerden baslar, frame(s) L ile periyodik
+        self.closed = wire.isClosed() or (pts[0] - pts[-1]).Length < 1e-6 * max(self.L, 1.0)
+        if self.closed:
+            k = min(range(n), key=lambda i: (pts[i] - tool_center).Length)
+            pts = pts[k:n] + pts[:k] + [pts[k]]
+        elif (pts[-1] - tool_center).Length < (pts[0] - tool_center).Length:
             pts = pts[::-1]                      # path starts at the tool
         self.n = n
         self.ds = self.L / n
         self.P = pts
         T = []
         for i in range(n + 1):
-            a = pts[max(0, i - 1)]
-            b = pts[min(n, i + 1)]
+            if self.closed:
+                a = pts[(i - 1) % n]
+                b = pts[(i + 1) % n]
+            else:
+                a = pts[max(0, i - 1)]
+                b = pts[min(n, i + 1)]
             t = b - a
             t.normalize()
             T.append(t)
@@ -102,11 +111,27 @@ class PathFrames:
                 r = r - T[i + 1] * r.dot(T[i + 1])
                 r.normalize()
                 R.append(r)
+            if self.closed:
+                # RMF bir turda kapanmaz (holonomi): son cerceve ilkine gore phi donmus. Fark yol boyunca dagitilir,
+                # yoksa kafesin son satiri ilkine burulmus baglanir.
+                t0 = T[0]
+                rn = R[n] - t0 * R[n].dot(t0)
+                if rn.Length > 1e-9:
+                    rn.normalize()
+                    phi = math.atan2(rn.cross(R[0]).dot(t0), rn.dot(R[0]))
+                    for i in range(1, n + 1):
+                        a = phi * i / n
+                        t = T[i]; b = t.cross(R[i])
+                        r = R[i] * math.cos(a) + b * math.sin(a)
+                        r = r - t * r.dot(t); r.normalize()
+                        R[i] = r
         self.R = R
         self.twist = math.radians(twist_deg)
 
     def frame(self, s):
         """(origin, t, r, b) at arc length s; right-handed (t, b, r)."""
+        if self.closed:
+            s = s % self.L
         if s <= 0:
             i, ext = 0, s
         elif s >= self.L:
@@ -139,7 +164,7 @@ class PathFrames:
 
     def max_curvature(self):
         k = 0.0
-        for i in range(1, self.n):
+        for i in range(0 if self.closed else 1, self.n):
             k = max(k, (self.T[i + 1] - self.T[i - 1]).Length / (2 * self.ds))
         return k
 
@@ -304,6 +329,11 @@ def _build_impl(tool, path, twist_deg=0.0, mode="rmf", clearance=0.0, fuse_ends=
 
     # ---- shadow caps (caps="shadow"): faces not seen from the first / last section plane
     shadow = None
+    closed = pf.closed
+    if closed:                  # kapali yol: kapak yok, ara bolgenin islemi butun tur boyunca
+        caps = "none"
+        fuse_ends = False
+        info["closed_path"] = True
     if caps == "shadow":
         try:
             tlc = tl
@@ -341,7 +371,7 @@ def _build_impl(tool, path, twist_deg=0.0, mode="rmf", clearance=0.0, fuse_ends=
     pts_local = [V(*p) for p in tl.tessellate(defl * 20)[0]]
     ncp = max(2, int(math.ceil(L / copy_step)))
     copies = []
-    for q in range(ncp + 1):
+    for q in range(ncp if closed else ncp + 1):     # kapali: s = L, s = 0 ile ayni kopya
         s = L * q / ncp
         pl = pf.placement(s)
         sh = tl.copy(); sh.Placement = pl.multiply(tl.Placement)
@@ -365,13 +395,19 @@ def _build_impl(tool, path, twist_deg=0.0, mode="rmf", clearance=0.0, fuse_ends=
             break
         pos.append(s)
     pos.append(s_hi)
+    if closed:                  # esit aralikli kesitler, ara bolgenin en buyuk adimiyla, uc sikilastirmasi yok
+        nsec = max(8, int(math.ceil(L / hmax)))
+        pos = [L * q / nsec for q in range(nsec)]
 
     def section(s):
         o, t, r, b = pf.frame(s)
         d = o.dot(t)
         polys = []
         for sr, sh, sp in copies:
-            if abs((sr + xmid) - s) > blen / 2 + 2 * copy_step + 0.5 * size:   # coarse prefilter
+            dsr = (sr + xmid) - s
+            if closed:
+                dsr = (dsr + L / 2) % L - L / 2
+            if abs(dsr) > blen / 2 + 2 * copy_step + 0.5 * size:   # coarse prefilter
                 continue
             ds = [p.dot(t) - d for p in sp]
             if min(ds) < -1e-6 and max(ds) > 1e-6:
@@ -451,7 +487,9 @@ def _build_impl(tool, path, twist_deg=0.0, mode="rmf", clearance=0.0, fuse_ends=
                 g.Placement = pl.multiply(f.Placement)
                 cap_faces.append(g)
         info["shadow_caps"] = (len(shadow[0]), len(shadow[2]))
-    cage = _cage_solid(rows, tmpl2, sharp, nT, size, info, cap_faces)
+    if closed and len(rows) != len(pos):
+        info["warnings"].append("closed path: %d of %d sections are empty; cage not closed" % (len(pos) - len(rows), len(pos)))
+    cage = _cage_solid(rows, tmpl2, sharp, nT, size, info, cap_faces, periodic=closed)
     result = cage
     if fuse_ends and not shadow:
         # only the parts of the start / end bodies that lie outside the cage are added:
@@ -655,8 +693,9 @@ def _folds(rows, nT):
     return f
 
 
-def _cage_solid(rows, tmpl2, sharp, nT, size, info, cap_faces=None):
-    """Quad cage (rows x template) -> closed BRep solid."""
+def _cage_solid(rows, tmpl2, sharp, nT, size, info, cap_faces=None, periodic=False):
+    """Quad cage (rows x template) -> closed BRep solid. periodic: kapali yol, son satir ilkine baglanir (halka),
+    kapak yuzu yok."""
     if sharp:
         chains = []
         for k in range(len(sharp)):
@@ -669,6 +708,8 @@ def _cage_solid(rows, tmpl2, sharp, nT, size, info, cap_faces=None):
     faces = []
     nu = len(rows); du = min(3, nu - 1)
     uk, um = _clamped(nu, du)
+    if periodic:                # nu kutup, nu + 1 dugum, katlilik 1: u yonunde periyodik
+        uk, um = [float(x) for x in range(nu + 1)], [1] * (nu + 1)
     if chains:
         for cols in chains:
             prm = [0.0]
@@ -687,7 +728,7 @@ def _cage_solid(rows, tmpl2, sharp, nT, size, info, cap_faces=None):
             srf = Part.BSplineSurface()
             srf.buildFromPolesMultsKnots([c.getPoles() for c in curves], um,
                                          curves[0].getMultiplicities(), uk,
-                                         curves[0].getKnots(), False, False, du,
+                                         curves[0].getKnots(), periodic, False, du,
                                          curves[0].Degree)
             faces.append(srf)
     else:                                       # smooth closed outline: periodic across
@@ -697,7 +738,7 @@ def _cage_solid(rows, tmpl2, sharp, nT, size, info, cap_faces=None):
         srf = Part.BSplineSurface()
         srf.buildFromPolesMultsKnots([c.getPoles() for c in curves], um,
                                      curves[0].getMultiplicities(), uk,
-                                     curves[0].getKnots(), False, True, du,
+                                     curves[0].getKnots(), periodic, True, du,
                                      curves[0].Degree)
         faces.append(srf)
 
@@ -708,7 +749,9 @@ def _cage_solid(rows, tmpl2, sharp, nT, size, info, cap_faces=None):
             eds.append(sf.uIso(u0 if first else u1).toShape())
         return Part.Face(Part.Wire(Part.__sortEdges__(eds)))
 
-    if cap_faces is not None:
+    if periodic:
+        shell = Part.Shell([Part.Face(sf) for sf in faces])
+    elif cap_faces is not None:
         allf = [Part.Face(sf) for sf in faces] + list(cap_faces)
         try:
             from BOPTools import JoinAPI
@@ -1437,7 +1480,7 @@ def _run_limited(fn, seconds):
 
 
 def _good(sol, info, strict):
-    bad = [w for w in info["warnings"] if "not closed" in w or "shadow caps failed" in w]
+    bad = [w for w in info["warnings"] if "not closed" in w or "shadow caps failed" in w or "sections are empty" in w]
     return sol.isValid() and len(sol.Solids) == 1 and not (strict and bad)
 
 
@@ -1446,7 +1489,25 @@ def build(tool, path, *args, method="standard", budgets=None, **kw):
     fast (shadow caps) -> standard (fused end bodies) -> coarse (fused, fewer samples).
     Raises BodySweepError (FAIL_MESSAGE) if even the last one fails.
     Returns (solid, info); info["method"] is the one that produced the result."""
-    budgets = budgets or {"fast": 25, "standard": 180, "coarse": 120}
+    budgets = budgets or {"fast": 25, "standard": 180, "coarse": 120, "closed": 300}
+    try:
+        closed = Part.Wire(Part.__sortEdges__(path.Edges)).isClosed()
+    except Exception:
+        closed = False
+    if closed:
+        # kapali yol: bas ve son yok, kapak hesaplanmaz; ara bolgenin kesit + isin izleme kafesi butun tur boyunca
+        # (periyodik). Hizli / standart / kaba ayrimi yalniz kapaklarda: tek deneme.
+        try:
+            curved = any(f.Surface.TypeId != "Part::GeomPlane" for f in tool.Faces)
+            f = lambda: _build_impl(tool, path, *args, caps="none", ncols=96 if curved else 48, **kw)
+            sol, info = _run_limited(f, budgets.get("closed"))
+            if _good(sol, info, strict=True):
+                info["method"] = "closed"
+                return sol, info
+            note = "; ".join(info["warnings"]) or "invalid result"
+        except Exception as ex:
+            note = str(ex)
+        raise BodySweepError(FAIL_MESSAGE + " (closed path: " + note + ")")
     chain = METHODS[METHODS.index(method):]
     notes = []
     for m in chain:

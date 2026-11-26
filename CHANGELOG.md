@@ -1,6 +1,14 @@
 # Changelog
 
-## Unreleased
+## 0.5.2 (2026-11-26)
+
+### Body Sweep
+
+- **Fix: closed paths (a closed spline, a circle, a chain of edges that ends where it starts).** The ray-traced method
+  treated them as open: it put a start and an end cap on top of each other at the seam, the cage did not close and the
+  sweep fell back to the Exact method (slow, and the seam came out with patches). On a closed path no caps are made
+  now: the sections and the ray-traced cage of the middle part run all the way round and the last row joins the first
+  (the path frames are corrected so the seam does not twist). Use a twist of 0 or 360 degrees on closed paths.
 
 ### Dome
 

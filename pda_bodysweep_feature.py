@@ -217,7 +217,8 @@ def compute_raytraced(tool, edges, p, cancel=None, progress=None, timeout=900):
         for w in res.get("warnings", []):
             App.Console.PrintWarning("Body Sweep (experimental): %s\n" % w)
         LAST_NOTES.append("Ray-traced: %s" % {"fast": "shadow caps", "standard": "fused ends (slower)",
-                                              "coarse": "coarse fused ends"}.get(res.get("method"), res.get("method") or "?"))
+                                              "coarse": "coarse fused ends",
+                                              "closed": "closed path, no caps"}.get(res.get("method"), res.get("method") or "?"))
         return Part.read(os.path.join(work, "out.brep"))
     finally:
         shutil.rmtree(work, ignore_errors=True)
